@@ -97,7 +97,7 @@ async function extractRowsFromContent(pdf, chain) {
     return [];
   }
 
-  const rows = parsed.list.slice(0, 7).map((item) => {
+  const rows = parsed.list.map((item) => {
     const category = VALID_CATEGORIES.includes(item.category) ? item.category : 'innovation';
     return {
       title: item.title || 'N/A',

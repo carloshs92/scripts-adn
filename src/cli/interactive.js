@@ -23,13 +23,13 @@ async function askForPDFPath() {
   return answer.pdfPath;
 }
 
-export async function run() {
+export async function run({ pdfArg } = {}) {
   logger.header('📄 PDF to CSV Converter con LangChain');
 
   try {
     // Paso 1: Localizar PDFs
     logger.section('Paso 1: Localizando PDFs');
-    const pdfPath = await askForPDFPath();
+    const pdfPath = pdfArg ?? await askForPDFPath();
 
     logger.processing('Buscando archivos PDF...');
     const pdfFiles = await findPDFs(pdfPath);
