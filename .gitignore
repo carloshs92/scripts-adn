@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+*.log
+dist/
+build/
+.DS_Store
+output/
+pdfs/
+*.csv
+.pdf-registry.json
+credentials/
+!credentials/.gitkeep
