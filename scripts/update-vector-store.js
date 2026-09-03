@@ -3,14 +3,18 @@
 /**
  * update-vector-store.js
  *
- * Reemplaza todos los archivos del vector store de OpenAI con el merged.csv
- * y publica una nueva versión del prompt asociado.
+ * Reemplaza todos los archivos del vector store de OpenAI con el contenido
+ * de output/merged.csv.
+ *
+ * Nota: el file_search de OpenAI no acepta archivos .csv, por lo que el CSV
+ * se convierte a Markdown (una sección por fila) antes de subirlo. Ese formato
+ * además se divide en chunks más limpios para la búsqueda semántica.
  *
  * Flujo:
- *   1. Elimina todos los archivos actuales del vector store
- *   2. Sube output/merged.csv como nuevo archivo
- *   3. Lo asocia al vector store y espera a que procese
- *   4. Publica una nueva versión del prompt
+ *   1. Convierte output/merged.csv a Markdown
+ *   2. Sube el Markdown y lo asocia al vector store
+ *   3. Espera a que termine de procesarse
+ *   4. Recién entonces elimina los archivos anteriores del store
  *
  * Uso:
  *   npm run update:vector
@@ -27,9 +31,12 @@
 
 import dotenv from 'dotenv';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import chalk from 'chalk';
 import OpenAI from 'openai';
+import * as csvService from '../src/services/csvService.js';
+import { recordVersion } from '../src/services/historyService.js';
 
 dotenv.config();
 
@@ -56,38 +63,73 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Convierte el CSV combinado a un Markdown con una sección por fila.
+ * El file_search de OpenAI no soporta .csv y este formato se divide
+ * en chunks más coherentes para la búsqueda semántica.
+ * @param {string} csvPath - Ruta del merged.csv
+ * @returns {Promise<{filePath: string, rowCount: number}>} Ruta del .md temporal
+ */
+async function csvToMarkdown(csvPath) {
+  const rows = await csvService.read(csvPath);
 
-// ─── Paso 1: Limpiar vector store ─────────────────────────────────────────────
-
-async function clearVectorStore(vectorStoreId) {
-  console.log(chalk.cyan('\n1. Limpiando vector store...'));
-
-  const filesToDelete = [];
-  for await (const file of openai.vectorStores.files.list(vectorStoreId)) {
-    filesToDelete.push(file.id);
+  if (rows.length === 0) {
+    throw new Error(`${csvPath} no contiene filas`);
   }
 
-  if (filesToDelete.length === 0) {
+  const sections = rows.map((row, index) => {
+    const title = row.title && row.title !== 'N/A' ? row.title : `Ítem ${index + 1}`;
+    const fields = Object.entries(row)
+      .filter(([key, value]) => key !== 'title' && value && value !== 'N/A')
+      .map(([key, value]) => `- **${key}**: ${String(value).replace(/\s+/g, ' ').trim()}`);
+
+    return `## ${title}\n${fields.join('\n')}`;
+  });
+
+  const markdown = `# Base de conocimiento Intercorp ADN\n\n${sections.join('\n\n')}\n`;
+  const mdPath = path.join(os.tmpdir(), `${path.basename(csvPath, '.csv')}.md`);
+  fs.writeFileSync(mdPath, markdown, 'utf-8');
+
+  return { filePath: mdPath, rowCount: rows.length, bytes: Buffer.byteLength(markdown) };
+}
+
+
+// ─── Listar archivos actuales del vector store ────────────────────────────────
+
+async function listVectorStoreFiles(vectorStoreId) {
+  const fileIds = [];
+  for await (const file of openai.vectorStores.files.list(vectorStoreId)) {
+    fileIds.push(file.id);
+  }
+  return fileIds;
+}
+
+// ─── Paso 3 (final): Eliminar los archivos anteriores ─────────────────────────
+
+async function deleteFiles(vectorStoreId, fileIds) {
+  console.log(chalk.cyan('\n4. Eliminando archivos anteriores...'));
+
+  if (fileIds.length === 0) {
     console.log(chalk.gray('   (sin archivos previos)'));
     return;
   }
 
-  for (const fileId of filesToDelete) {
+  for (const fileId of fileIds) {
     await openai.vectorStores.files.del(vectorStoreId, fileId);
     await openai.files.del(fileId);
     console.log(chalk.gray(`   ✓ Eliminado: ${fileId}`));
   }
 
-  console.log(chalk.green(`   ${filesToDelete.length} archivo(s) eliminado(s)`));
+  console.log(chalk.green(`   ${fileIds.length} archivo(s) eliminado(s)`));
 }
 
-// ─── Paso 2: Subir merged.csv ─────────────────────────────────────────────────
+// ─── Paso 2: Subir el Markdown ────────────────────────────────────────────────
 
-async function uploadCSV(csvPath) {
-  console.log(chalk.cyan('\n2. Subiendo merged.csv...'));
+async function uploadMarkdown(mdPath) {
+  const fileName = path.basename(mdPath);
+  console.log(chalk.cyan(`\n2. Subiendo ${fileName}...`));
 
-  const fileName = path.basename(csvPath);
-  const fileStream = fs.createReadStream(csvPath);
+  const fileStream = fs.createReadStream(mdPath);
 
   const uploaded = await openai.files.create({
     file: fileStream,
@@ -129,6 +171,37 @@ async function addToVectorStore(vectorStoreId, fileId) {
   throw new Error('Timeout esperando el procesamiento del archivo en el vector store');
 }
 
+// ─── Paso 5: Registrar la versión en el historial ─────────────────────────────
+
+async function saveHistory({ fileId, fileName, bytes }) {
+  console.log(chalk.cyan('\n5. Registrando versión en el historial...'));
+
+  const entry = await recordVersion({ csvPath: MERGED_PATH, fileId, fileName, bytes });
+  const { added, removed, modified, unchanged, sources } = entry.changes;
+
+  if (entry.previousRowCount === 0) {
+    console.log(chalk.green(`   ✓ Primera versión registrada: ${entry.rowCount} ítem(s)`));
+  } else {
+    console.log(
+      chalk.green(`   ✓ ${entry.previousRowCount} → ${entry.rowCount} ítem(s)`) +
+        chalk.gray(
+          `  (+${added.length} nuevos, -${removed.length} eliminados, ` +
+            `~${modified.length} modificados, ${unchanged} sin cambios)`
+        )
+    );
+
+    if (sources.added.length > 0) {
+      console.log(chalk.gray(`   Fuentes nuevas    : ${sources.added.join(', ')}`));
+    }
+    if (sources.removed.length > 0) {
+      console.log(chalk.gray(`   Fuentes eliminadas: ${sources.removed.join(', ')}`));
+    }
+  }
+
+  console.log(chalk.gray(`   Snapshot: ${entry.snapshot}`));
+  console.log(chalk.gray(`   Historial completo: npm run history`));
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -146,9 +219,28 @@ async function main() {
   const stats = fs.statSync(MERGED_PATH);
   console.log(chalk.gray(`   Tamaño       : ${(stats.size / 1024).toFixed(1)} KB`));
 
-  await clearVectorStore(VECTOR_STORE_ID);
-  const fileId = await uploadCSV(MERGED_PATH);
-  await addToVectorStore(VECTOR_STORE_ID, fileId);
+  // Guardar los archivos actuales para eliminarlos recién al final:
+  // así el store nunca queda vacío si algo falla a mitad de camino.
+  const previousFileIds = await listVectorStoreFiles(VECTOR_STORE_ID);
+
+  console.log(chalk.cyan('\n1. Convirtiendo CSV a Markdown...'));
+  const { filePath: mdPath, rowCount, bytes } = await csvToMarkdown(MERGED_PATH);
+  console.log(chalk.green(`   ✓ ${rowCount} fila(s) → ${path.basename(mdPath)}`));
+
+  const fileId = await uploadMarkdown(mdPath);
+
+  try {
+    await addToVectorStore(VECTOR_STORE_ID, fileId);
+  } catch (err) {
+    // El archivo quedó subido pero sin asociar: eliminarlo para no dejar basura
+    await openai.files.del(fileId).catch(() => {});
+    throw err;
+  }
+
+  await deleteFiles(VECTOR_STORE_ID, previousFileIds);
+  fs.rmSync(mdPath, { force: true });
+
+  await saveHistory({ fileId, fileName: path.basename(mdPath), bytes });
 
   console.log(chalk.blue('\n' + '─'.repeat(50)));
   console.log(chalk.green.bold('✅ Vector store actualizado — el chat ya usa el nuevo contenido'));

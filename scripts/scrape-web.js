@@ -53,7 +53,9 @@ const SOURCES = {
   // 'https://www.realplaza.com/',
   // 'https://www.oechsle.pe/',
     'https://app.agora.pe/',
-    'https://sip.pe/'
+    'https://sip.pe/',
+    'https://sip.pe/blog',
+    'https://sip.pe/quienes-somos'
 
   ],
   health: [

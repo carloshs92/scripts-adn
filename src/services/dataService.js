@@ -28,6 +28,8 @@ export const VALID_CATEGORIES = ['sustainability', 'talent', 'innovation', 'secu
 
 const EXTRACTION_PROMPT = `Eres un extractor de datos estructurados. Analiza el siguiente documento y extrae el máximo de ítems relevantes.
 
+El documento puede ser un texto corrido (PDF) o una hoja de cálculo exportada como texto. En el segundo caso, cada sección "### Hoja: <nombre>" es una hoja del Excel, la primera fila suele ser el encabezado y las columnas vienen separadas por " | ": interpreta cada fila de datos como un ítem potencial.
+
 REGLAS OBLIGATORIAS:
 1. Solo usa información presente en el documento. No inventes ni alucines datos.
 2. Cada ítem debe clasificarse en exactamente una de estas categorías: sustainability, talent, innovation, security.
@@ -63,7 +65,7 @@ function createModel() {
 }
 
 /**
- * Extrae las filas de un único objeto de contenido PDF usando la chain de LangChain.
+ * Extrae las filas de un único documento (PDF o Excel) usando la chain de LangChain.
  * @param {Object} pdf - Objeto {fileName, filePath, content}
  * @param {Object} chain - Chain de LangChain lista para invocar
  * @returns {Promise<Array>} Filas extraídas para ese PDF
@@ -116,8 +118,8 @@ async function extractRowsFromContent(pdf, chain) {
 }
 
 /**
- * Extrae datos de cada PDF por separado.
- * @param {Array<string>} pdfFiles - Rutas de los PDFs
+ * Extrae datos de cada documento (PDF o Excel) por separado.
+ * @param {Array<string>} pdfFiles - Rutas de los documentos
  * @returns {Promise<Array<{fileName, filePath, rows}>>} Un objeto por PDF con sus filas
  */
 export async function extractDataPerFile(pdfFiles) {

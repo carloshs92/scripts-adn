@@ -30,6 +30,13 @@ export const config = {
     maxCharactersForExtraction: 10000,
   },
 
+  // Configuración de procesamiento de Excel
+  xlsx: {
+    // Máximo número de caracteres a enviar al modelo por archivo Excel
+    // (las hojas grandes se truncan para no desbordar el contexto)
+    maxCharactersForExtraction: 60000,
+  },
+
   // Configuración de CSV
   csv: {
     // Marcar siempre las celdas con comillas
@@ -60,7 +67,11 @@ export const config = {
   // Rutas por defecto
   paths: {
     pdfsDir: './pdfs',
+    // Extensiones aceptadas dentro de pdfsDir
+    supportedExtensions: ['.pdf', '.xlsx', '.xlsm', '.xls'],
     outputDir: './output',
+    // Snapshots e historial de cada actualización del vector store
+    historyDir: './history',
     defaultCSVName: 'datos.csv',
   },
 

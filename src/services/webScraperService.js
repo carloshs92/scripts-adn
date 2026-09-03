@@ -6,7 +6,7 @@ import { logger } from '../utils/logger.js';
 const CONTENT_PATTERNS =
   /blog|news|noticias|prensa|press|articul|actualidad|novedades|insights|publicaciones|sala-de-prensa|comunicados|media|magazine/i;
 
-const MAX_SUBPAGES = 6;
+const MAX_SUBPAGES = 16;
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_CONTENT_CHARS = 14000;
 const REQUEST_DELAY_MS = 1200;
