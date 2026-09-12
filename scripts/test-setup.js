@@ -55,12 +55,12 @@ async function verificarInstalacion() {
     const envContent = fs.readFileSync('.env', 'utf-8');
     const tieneKey = (nombre) => new RegExp(`^${nombre}=\\s*\\S+`, 'm').test(envContent);
 
-    // La extracción usa OpenRouter u OpenAI; el vector store solo OpenAI
+    // La extracción corre sobre el proveedor que indique LLM_PROVIDER
     if (tieneKey('OPENROUTER_API_KEY')) {
-      console.log('  ✅ OPENROUTER_API_KEY configurada (extracción)');
+      console.log('  ✅ OPENROUTER_API_KEY configurada');
     }
     if (tieneKey('OPENAI_API_KEY')) {
-      console.log('  ✅ OPENAI_API_KEY configurada (update:vector)');
+      console.log('  ✅ OPENAI_API_KEY configurada (alternativa)');
     }
     if (!tieneKey('OPENROUTER_API_KEY') && !tieneKey('OPENAI_API_KEY')) {
       console.log('  ⚠️  Sin key de LLM: define OPENROUTER_API_KEY u OPENAI_API_KEY');
