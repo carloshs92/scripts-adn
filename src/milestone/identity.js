@@ -15,12 +15,29 @@
  */
 
 /**
- * Identidad de un hito entre versiones del corpus
+ * Colapsa espacios repetidos y recorta los extremos.
+ *
+ * No es cosmético: el corpus en Markdown se escribe aplicando esto a cada
+ * valor, porque su parser lee campo por línea y un salto lo rompería. Si la
+ * identidad no normalizara igual, un hito cuyo nombre de archivo trae doble
+ * espacio tendría una identidad distinta a cada lado de la frontera de repos
+ * — pasaba con `[Intercorp] Estudio estratégico 2025  (1).pdf`, cuyos 22 hitos
+ * parecían faltar del índice cuando estaban todos.
+ *
+ * @param {*} value
+ * @returns {string}
+ */
+function collapse(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Identidad de un hito entre versiones del corpus y entre repositorios
  * @param {Object} milestone
  * @returns {string}
  */
 export function key(milestone) {
-  return `${milestone.source_file || 'N/A'}::${milestone.title || 'N/A'}`;
+  return `${collapse(milestone.source_file) || 'N/A'}::${collapse(milestone.title) || 'N/A'}`;
 }
 
 /**

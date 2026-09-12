@@ -1,5 +1,5 @@
 import ExcelJS from 'exceljs';
-import { config } from '../config.js';
+import { config } from '../../config.js';
 
 /**
  * Convierte el valor de una celda de ExcelJS a texto plano.

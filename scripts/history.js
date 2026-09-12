@@ -13,7 +13,7 @@
  */
 
 import chalk from 'chalk';
-import { loadHistory } from '../src/services/historyService.js';
+import { loadHistory } from '../src/corpus/version.js';
 
 const args = process.argv.slice(2);
 const showDetail = args.includes('--detail') || args.includes('--last');

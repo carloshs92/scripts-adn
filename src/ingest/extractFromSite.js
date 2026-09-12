@@ -1,7 +1,8 @@
 import { PromptTemplate } from 'langchain/prompts';
-import { createChatModel } from './llmService.js';
-import { FIELDS, dedupe, extractWithChain, PROMPT_SCHEMA } from '../milestone/index.js';
-import { logger } from '../utils/logger.js';
+import { createChatModel } from '../platform/llm.js';
+import { FIELDS, dedupe, PROMPT_SCHEMA } from '../milestone/index.js';
+import { extractWithChain } from './fromModelResponse.js';
+import { logger } from '../platform/log.js';
 import dotenv from 'dotenv';
 
 dotenv.config();

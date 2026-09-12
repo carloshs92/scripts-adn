@@ -12,8 +12,8 @@
  * los otros veintinueve.
  */
 
-import { coerce } from './schema.js';
-import { logger } from '../utils/logger.js';
+import { coerce } from '../milestone/schema.js';
+import { logger } from '../platform/log.js';
 
 /**
  * @param {string} responseText - Contenido devuelto por el modelo

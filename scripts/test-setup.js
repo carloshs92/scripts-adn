@@ -17,10 +17,11 @@ async function verificarInstalacion() {
   const archivos = [
     { archivo: 'src/index.js', descripcion: 'Script principal' },
     { archivo: 'src/config.js', descripcion: 'Configuración' },
-    { archivo: 'src/services/pdfService.js', descripcion: 'Servicio de PDF' },
-    { archivo: 'src/services/xlsxService.js', descripcion: 'Servicio de Excel' },
-    { archivo: 'src/services/dataService.js', descripcion: 'Servicio de datos' },
-    { archivo: 'src/services/csvService.js', descripcion: 'Servicio de CSV' },
+    { archivo: 'src/milestone/schema.js', descripcion: 'Dominio: el hito' },
+    { archivo: 'src/ingest/extractFromDocuments.js', descripcion: 'Ingesta de documentos' },
+    { archivo: 'src/ingest/extractFromSite.js', descripcion: 'Ingesta de sitios' },
+    { archivo: 'src/corpus/publish.js', descripcion: 'Publicación del corpus' },
+    { archivo: 'src/platform/csv.js', descripcion: 'Plataforma: CSV' },
     { archivo: 'src/cli/interactive.js', descripcion: 'CLI interactiva' },
     { archivo: 'package.json', descripcion: 'Dependencias' },
   ];

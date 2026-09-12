@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import * as csvService from './csvService.js';
+import * as csvService from '../platform/csv.js';
 import { key as milestoneKey, changedFields } from '../milestone/index.js';
 import { config } from '../config.js';
 

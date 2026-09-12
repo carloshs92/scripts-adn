@@ -1,11 +1,11 @@
 import inquirer from 'inquirer';
 import * as path from 'path';
-import { findPDFs } from '../services/pdfService.js';
-import { extractDataPerFile, COLUMNS } from '../services/dataService.js';
-import * as csvService from '../services/csvService.js';
-import { logger } from '../utils/logger.js';
-import { validatePDFPath, ensureDirectory } from '../utils/validator.js';
-import { filterUnprocessed, markProcessed } from '../utils/tracker.js';
+import { findPDFs } from '../ingest/document/index.js';
+import { extractDataPerFile, COLUMNS } from '../ingest/extractFromDocuments.js';
+import * as csvService from '../platform/csv.js';
+import { logger } from '../platform/log.js';
+import { validatePDFPath, ensureDirectory } from '../platform/paths.js';
+import { filterUnprocessed, markProcessed } from '../ingest/processed.js';
 
 const OUTPUT_DIR = './output';
 

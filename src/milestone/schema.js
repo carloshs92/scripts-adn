@@ -11,7 +11,7 @@
  */
 
 /** Columnas del hito, en el orden en que se escriben al CSV. */
-export const FIELDS = [
+export const FIELDS = Object.freeze([
   'title',
   'shortDescription',
   'category',
@@ -20,10 +20,10 @@ export const FIELDS = [
   'year',
   'score',
   'source_file',
-];
+]);
 
 /** Las únicas categorías admitidas. Cualquier otra se coacciona a la primera. */
-export const CATEGORIES = ['sustainability', 'talent', 'innovation', 'security'];
+export const CATEGORIES = Object.freeze(['sustainability', 'talent', 'innovation', 'security']);
 
 /** Categoría a la que cae un valor no reconocido. */
 export const FALLBACK_CATEGORY = 'innovation';
@@ -69,15 +69,24 @@ export const PROMPT_SCHEMA = `{{
 export function coerce(item, sourceFile) {
   const category = CATEGORIES.includes(item.category) ? item.category : FALLBACK_CATEGORY;
 
+  // Los textos se normalizan acá y no al serializar: el corpus en Markdown se
+  // lee campo por línea, así que un salto de línea dentro de un valor rompería
+  // el registro, y un doble espacio en `source_file` haría que el mismo hito
+  // tenga identidades distintas a cada lado de la frontera de repos.
+  const text = (value, fallback) => {
+    const clean = String(value ?? '').replace(/\s+/g, ' ').trim();
+    return clean || fallback;
+  };
+
   return {
-    title: item.title || MISSING,
-    shortDescription: item.shortDescription || MISSING,
+    title: text(item.title, MISSING),
+    shortDescription: text(item.shortDescription, MISSING),
     category,
-    largeDescription: item.largeDescription || MISSING,
-    company: item.company || FALLBACK_COMPANY,
-    year: item.year || MISSING,
+    largeDescription: text(item.largeDescription, MISSING),
+    company: text(item.company, FALLBACK_COMPANY),
+    year: text(item.year, MISSING),
     score: typeof item.score === 'number' ? item.score : MISSING,
-    source_file: sourceFile,
+    source_file: text(sourceFile, MISSING),
   };
 }
 

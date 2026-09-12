@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
-import { logger } from '../utils/logger.js';
-import { fetchWordPressContent } from './wordpressService.js';
+import { logger } from '../../platform/log.js';
+import { fetchWordPressContent } from './wordpress.js';
 
 // Patrones de URLs/texto que indican contenido relevante (blogs, noticias, prensa)
 const CONTENT_PATTERNS =

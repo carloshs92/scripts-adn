@@ -1,8 +1,9 @@
 import { PromptTemplate } from 'langchain/prompts';
-import { extractMultiplePDFs } from './pdfService.js';
-import { createChatModel } from './llmService.js';
-import { FIELDS, extractWithChain, PROMPT_SCHEMA } from '../milestone/index.js';
-import { logger } from '../utils/logger.js';
+import { extractMultiplePDFs } from './document/index.js';
+import { createChatModel } from '../platform/llm.js';
+import { FIELDS, PROMPT_SCHEMA } from '../milestone/index.js';
+import { extractWithChain } from './fromModelResponse.js';
+import { logger } from '../platform/log.js';
 import dotenv from 'dotenv';
 
 dotenv.config();

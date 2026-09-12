@@ -24,12 +24,12 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
-import { scrapeWebsite, getDomain } from '../src/services/webScraperService.js';
-import { extractDataFromWeb, COLUMNS } from '../src/services/webDataService.js';
+import { scrapeWebsite, getDomain } from '../src/ingest/site/crawl.js';
+import { extractDataFromWeb, COLUMNS } from '../src/ingest/extractFromSite.js';
 import { dedupe } from '../src/milestone/index.js';
-import * as csvService from '../src/services/csvService.js';
-import { logger } from '../src/utils/logger.js';
-import { llmConfig } from '../src/services/llmService.js';
+import * as csvService from '../src/platform/csv.js';
+import { logger } from '../src/platform/log.js';
+import { llmConfig } from '../src/platform/llm.js';
 
 dotenv.config();
 

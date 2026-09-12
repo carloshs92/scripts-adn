@@ -2,7 +2,7 @@ import { createObjectCsvWriter, createObjectCsvStringifier } from 'csv-writer';
 import { createReadStream, existsSync, writeFileSync } from 'fs';
 import csv from 'csv-parser';
 import { MISSING } from '../milestone/index.js';
-import { logger } from '../utils/logger.js';
+import { logger } from './log.js';
 
 /**
  * Verifica si un archivo CSV existe

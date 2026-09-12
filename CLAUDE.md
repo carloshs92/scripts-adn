@@ -18,45 +18,47 @@ Script Node.js que convierte PDFs, Excel y sitios web a CSV usando LangChain sob
 
 ```
 src/
-├── index.js              # Punto de entrada → corre cli/interactive.js
-├── config.js             # Configuración centralizada (modelos, rutas, límites)
-├── milestone/            # EL modelo de dominio: qué es un hito
-│   ├── schema.js         #   campos, categorías, coerción, esquema para el prompt
-│   ├── identity.js       #   cuándo dos hitos son el mismo (entre versiones y dentro de una extracción)
-│   ├── dedupe.js         #   descarte de repetidos por título normalizado
-│   ├── fromModelResponse.js  # respuesta cruda del modelo → hitos válidos
-│   └── index.js          #   punto de entrada único del dominio
-├── services/
-│   ├── pdfService.js     # Búsqueda de documentos y extracción de texto (PDF y Excel)
-│   ├── xlsxService.js    # Extracción de texto de archivos Excel (.xlsx/.xlsm/.xls)
-│   ├── llmService.js     # Proveedor de LLM (OpenRouter u OpenAI) y creación del modelo
-│   ├── markdownService.js # Conversión de filas del CSV a Markdown (por fuente o corpus único)
-│   ├── dataService.js    # Prompt de documentos + invocación de la chain
-│   ├── csvService.js     # Creación y escritura de CSVs
-│   ├── webScraperService.js # Scraping de sitios web (agrupa URLs por dominio)
-│   ├── wordpressService.js  # Lectura de CMS headless vía REST + ACF (sitios SPA)
-│   ├── webDataService.js # Extracción de ítems desde contenido web + dedupe
-│   ├── driveService.js   # Upload de CSVs a Google Drive como Sheets
-│   └── historyService.js # Snapshots y diff entre versiones del corpus
-├── cli/
-│   └── interactive.js    # Flujo interactivo CLI con inquirer
-└── utils/
-    ├── logger.js         # Logging coloreado con chalk
-    ├── tracker.js        # Seguimiento de progreso
-    └── validator.js      # Validación de rutas y config
-scripts/
-├── sync-spreadsheet.js   # Sube output/*.csv a Google Drive
-├── export-corpus.js      # Exporta merged.csv como Markdown + registra la versión
-├── history.js            # Muestra el historial de versiones del corpus
-└── test-setup.js         # Verifica instalación
+├── index.js              # Punto de entrada → cli/interactive.js
+├── config.js             # Parámetros ajustables (modelos, rutas, límites)
+│
+├── milestone/            # EL DOMINIO — qué es un hito. No depende de nada externo.
+│   ├── schema.js         #   FIELDS, CATEGORIES, MISSING, coerce(), PROMPT_SCHEMA
+│   ├── identity.js       #   key() entre versiones · titleKey() dentro de una extracción
+│   ├── dedupe.js         #   descarte de repetidos, gana mayor score
+│   └── index.js          #   barrel del dominio
+│
+├── ingest/               # CASOS DE USO — de una fuente salen hitos
+│   ├── extractFromDocuments.js  # prompt de documentos + chain
+│   ├── extractFromSite.js       # prompt web + chain + dedupe
+│   ├── fromModelResponse.js     # respuesta del modelo → hitos (4 compuertas)
+│   ├── processed.js             # registro de documentos ya procesados
+│   ├── document/
+│   │   ├── index.js      #     búsqueda y lectura de documentos
+│   │   └── spreadsheet.js#     lectura de Excel con exceljs
+│   └── site/
+│       ├── crawl.js      #     scraping HTML + presupuesto de contenido
+│       └── wordpress.js  #     CMS headless vía REST + ACF
+│
+├── corpus/               # CASOS DE USO — el corpus se consolida, publica y versiona
+│   ├── consolidate.js    #   CSVs por documento → merged.csv
+│   ├── publishToApp.js   #   merged.csv → milestones.md + versión
+│   ├── publishToDrive.js #   CSVs → Google Drive
+│   ├── publish.js        #   consolidar + publicar + VERIFICAR el índice
+│   ├── version.js        #   snapshots y diff entre versiones
+│   └── markdown.js       #   serialización del hito a Markdown
+│
+├── platform/             # REEMPLAZABLE — nombrado por la herramienta, a propósito
+│   ├── llm.js  csv.js  drive.js  log.js  paths.js
+│
+└── cli/interactive.js    # Flujo interactivo con inquirer
 ```
 
 ## Comandos disponibles
 
 ```bash
 npm start              # CLI interactivo: convierte PDFs y Excel → un CSV por documento en output/
-npm run merge:csv      # Combina todos los CSVs de output/ en output/merged.csv
-npm run export:corpus  # Exporta merged.csv como Markdown (--app lo escribe en intercorp-adn/data/milestones.md)
+npm run merge:csv      # Consolida los CSVs de output/ en output/merged.csv
+npm run publish:corpus # Consolida + publica milestones.md en la app + VERIFICA su índice
 npm test               # Verifica que la instalación esté correcta
 npm run example        # Ejemplo de uso programático
 npm run sync:spreadsheet  # Sube todos los CSVs de output/ a Google Drive (en proceso)
@@ -85,7 +87,9 @@ MERGED_NAME                # Opcional, default: merged.csv
 - El modelo por defecto es `gpt-4o-mini` para optimizar costos
 - Campos sin información se marcan como `N/A`
 - El `config.js` es la fuente de verdad para parámetros ajustables
-- `src/milestone/` es la fuente de verdad de las reglas del hito; los servicios no las redefinen
+- `src/milestone/` es la fuente de verdad de las reglas del hito y **no importa nada de fuera de sí mismo**
+- Las dependencias apuntan hacia adentro: `platform/` ← `ingest/` y `corpus/` ← `milestone/`
+- Un script de `scripts/` solo parsea argumentos y formatea salida; la lógica vive en un caso de uso
 
 ## Flujo principal (PDF/Excel → CSV individual por documento)
 
@@ -172,14 +176,22 @@ genera ~8x más tokens de salida y termina costando más. Y los modelos chicos n
 falta: la app dejó de consultarlo al pasar a la búsqueda rápida con índice local. Con él se retiró
 `update-vector-store.js`, y el histórico —que colgaba de esa subida— pasó a `export:corpus`.
 
-## Exportar el corpus para la app (merged.csv → milestones.md)
+## Publicar el corpus (merged.csv → la app)
 
-`npm run export:corpus -- --app` escribe `../intercorp-adn/data/milestones.md`, que es la entrada
-de `build-graph.mjs` y por lo tanto del índice de búsqueda rápida de la app.
+`npm run publish:corpus` encadena tres cosas que antes eran tres comandos sueltos:
 
-Antes ese archivo se exportaba a mano desde el vector store y quedaba desactualizado en silencio:
-la app respondía con datos viejos sin que nada fallara. Después de cada `merge:csv` conviene
-correr también este export y regenerar el índice en la app.
+1. `corpus/consolidate.js` — combina los `output/*.csv` en `merged.csv`. Ordena los archivos
+   alfabéticamente para que el corpus sea reproducible entre máquinas (antes el orden lo daba
+   el filesystem vía `glob`)
+2. `corpus/publishToApp.js` — escribe `../intercorp-adn/data/milestones.md` y registra la versión
+3. `corpus/publish.js` — **verifica** que el índice commiteado de la app cubra exactamente los
+   hitos publicados, comparando identidades con `milestone.key()`, no cantidades
+
+**Por qué existe el paso 3.** Su ausencia costó dos semanas de datos viejos: el índice quedó en
+609 hitos mientras el CSV tenía 620, sin una excepción ni una línea de log. Un conteo no alcanza
+—dos corpus pueden tener 620 filas y no ser el mismo— así que se comparan identidades. Cuando
+detecta desfase imprime los hitos que faltan o sobran y el comando exacto para regenerar el
+índice; no puede hacerlo solo porque `build-graph.mjs` vive en el otro repositorio.
 
 ## Flujo de sincronización (CSV → Google Drive)
 

@@ -9,7 +9,7 @@
     "example": "node src/examples/programmatic-usage.js",
     "scrape:web": "node scripts/scrape-web.js",
     "merge:csv": "node scripts/merge-csv.js",
-    "export:corpus": "node scripts/export-corpus.js",
+    "publish:corpus": "node scripts/publish-corpus.js",
     "sync:spreadsheet": "node scripts/sync-spreadsheet.js",
     "history": "node scripts/history.js"
   },
