@@ -25,7 +25,8 @@ import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
 import { scrapeWebsite, getDomain } from '../src/services/webScraperService.js';
-import { extractDataFromWeb, dedupeRows, COLUMNS } from '../src/services/webDataService.js';
+import { extractDataFromWeb, COLUMNS } from '../src/services/webDataService.js';
+import { dedupe } from '../src/milestone/index.js';
 import * as csvService from '../src/services/csvService.js';
 import { logger } from '../src/utils/logger.js';
 import { llmConfig } from '../src/services/llmService.js';
@@ -205,7 +206,7 @@ async function main() {
     );
 
     // 3. Segunda pasada de deduplicación sobre lo que se va a escribir
-    const { rows, duplicates } = dedupeRows(extracted);
+    const { milestones: rows, duplicates } = dedupe(extracted);
     if (duplicates > 0) {
       console.log(chalk.yellow(`│  ♻️  ${duplicates} duplicado(s) descartado(s)`));
     }

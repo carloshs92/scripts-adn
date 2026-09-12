@@ -1,3 +1,5 @@
+import { hasValue } from '../milestone/index.js';
+
 /**
  * markdownService.js
  *
@@ -11,16 +13,21 @@
  */
 
 /**
- * Convierte una fila del CSV en una sección Markdown autocontenida.
- * @param {Object} row - Fila del CSV
+ * Convierte un hito en una sección Markdown autocontenida.
+ *
+ * El `replace(/\s+/g, ' ')` no es cosmético: el parser del otro repo lee los
+ * campos con una regex por línea, así que un salto de línea dentro de un valor
+ * rompería el registro. La garantía vive acá, en el escritor.
+ *
+ * @param {Object} milestone - Hito
  * @param {number} index - Posición, usada solo si falta el título
  * @returns {string}
  */
-export function rowToSection(row, index) {
-  const title = row.title && row.title !== 'N/A' ? row.title : `Ítem ${index + 1}`;
-  const fields = Object.entries(row)
-    .filter(([key, value]) => key !== 'title' && value && value !== 'N/A')
-    .map(([key, value]) => `- **${key}**: ${String(value).replace(/\s+/g, ' ').trim()}`);
+export function rowToSection(milestone, index) {
+  const title = hasValue(milestone.title) ? milestone.title : `Ítem ${index + 1}`;
+  const fields = Object.entries(milestone)
+    .filter(([field, value]) => field !== 'title' && hasValue(value))
+    .map(([field, value]) => `- **${field}**: ${String(value).replace(/\s+/g, ' ').trim()}`);
 
   return `## ${title}\n${fields.join('\n')}`;
 }

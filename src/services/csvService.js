@@ -1,6 +1,7 @@
 import { createObjectCsvWriter, createObjectCsvStringifier } from 'csv-writer';
 import { createReadStream, existsSync, writeFileSync } from 'fs';
 import csv from 'csv-parser';
+import { MISSING } from '../milestone/index.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -76,7 +77,7 @@ export async function addRows(csvPath, data, columns) {
     const filteredData = data.map((record) => {
       const filtered = {};
       columns.forEach((col) => {
-        filtered[col] = record[col] || 'N/A';
+        filtered[col] = record[col] || MISSING;
       });
       return filtered;
     });

@@ -1,32 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import * as csvService from './csvService.js';
+import { key as milestoneKey, changedFields } from '../milestone/index.js';
 import { config } from '../config.js';
 
 const HISTORY_DIR = config.paths.historyDir;
 const SNAPSHOTS_DIR = path.join(HISTORY_DIR, 'snapshots');
 const HISTORY_FILE = path.join(HISTORY_DIR, 'history.json');
-
-/**
- * Clave única de una fila: un mismo ítem se identifica por su documento
- * de origen más su título.
- * @param {Object} row - Fila del CSV
- * @returns {string}
- */
-function rowKey(row) {
-  return `${row.source_file || 'N/A'}::${row.title || 'N/A'}`;
-}
-
-/**
- * Campos que cambiaron entre dos versiones de la misma fila
- * @param {Object} before
- * @param {Object} after
- * @returns {Array<string>} Nombres de los campos distintos
- */
-function changedFields(before, after) {
-  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-  return [...keys].filter((key) => (before[key] || '') !== (after[key] || ''));
-}
 
 /**
  * Compara dos conjuntos de filas y resume qué cambió
@@ -35,8 +15,8 @@ function changedFields(before, after) {
  * @returns {Object} Resumen de cambios
  */
 export function diffRows(previous, current) {
-  const prevMap = new Map(previous.map((row) => [rowKey(row), row]));
-  const currMap = new Map(current.map((row) => [rowKey(row), row]));
+  const prevMap = new Map(previous.map((row) => [milestoneKey(row), row]));
+  const currMap = new Map(current.map((row) => [milestoneKey(row), row]));
 
   const added = [];
   const removed = [];

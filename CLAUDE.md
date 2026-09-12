@@ -20,12 +20,18 @@ Script Node.js que convierte PDFs, Excel y sitios web a CSV usando LangChain sob
 src/
 ├── index.js              # Punto de entrada → corre cli/interactive.js
 ├── config.js             # Configuración centralizada (modelos, rutas, límites)
+├── milestone/            # EL modelo de dominio: qué es un hito
+│   ├── schema.js         #   campos, categorías, coerción, esquema para el prompt
+│   ├── identity.js       #   cuándo dos hitos son el mismo (entre versiones y dentro de una extracción)
+│   ├── dedupe.js         #   descarte de repetidos por título normalizado
+│   ├── fromModelResponse.js  # respuesta cruda del modelo → hitos válidos
+│   └── index.js          #   punto de entrada único del dominio
 ├── services/
 │   ├── pdfService.js     # Búsqueda de documentos y extracción de texto (PDF y Excel)
 │   ├── xlsxService.js    # Extracción de texto de archivos Excel (.xlsx/.xlsm/.xls)
 │   ├── llmService.js     # Proveedor de LLM (OpenRouter u OpenAI) y creación del modelo
 │   ├── markdownService.js # Conversión de filas del CSV a Markdown (por fuente o corpus único)
-│   ├── dataService.js    # Extracción de datos con LangChain
+│   ├── dataService.js    # Prompt de documentos + invocación de la chain
 │   ├── csvService.js     # Creación y escritura de CSVs
 │   ├── webScraperService.js # Scraping de sitios web (agrupa URLs por dominio)
 │   ├── wordpressService.js  # Lectura de CMS headless vía REST + ACF (sitios SPA)
@@ -79,6 +85,7 @@ MERGED_NAME                # Opcional, default: merged.csv
 - El modelo por defecto es `gpt-4o-mini` para optimizar costos
 - Campos sin información se marcan como `N/A`
 - El `config.js` es la fuente de verdad para parámetros ajustables
+- `src/milestone/` es la fuente de verdad de las reglas del hito; los servicios no las redefinen
 
 ## Flujo principal (PDF/Excel → CSV individual por documento)
 
@@ -89,10 +96,35 @@ MERGED_NAME                # Opcional, default: merged.csv
 5. Cada fila incluye `source_file` con el nombre del documento de origen
 6. Los documentos procesados quedan registrados en `.pdf-registry.json`
 
-**Columnas fijas** (definidas en `dataService.COLUMNS`):
+**Columnas fijas** (definidas en `src/milestone/schema.js` → `FIELDS`):
 `title`, `shortDescription`, `category`, `largeDescription`, `company`, `year`, `score`, `source_file`
 
-**Categorías válidas**: `sustainability`, `talent`, `innovation`, `security`
+**Categorías válidas** (`CATEGORIES`): `sustainability`, `talent`, `innovation`, `security`
+
+## El modelo de dominio: `src/milestone/`
+
+El hito es la entidad central. **Todas sus reglas viven en `src/milestone/` y en ningún otro
+lugar.** Antes estaban repartidas: el esquema y las categorías en `dataService`, la coerción
+duplicada entre `dataService` y `webDataService`, la identidad en `historyService` y la clave de
+deduplicación en `webDataService` — seis piezas del mismo concepto en cuatro archivos, con 38
+líneas de código idénticas entre los dos extractores.
+
+| Qué | Dónde |
+|---|---|
+| Campos, categorías y sus fallbacks | `schema.js` → `FIELDS`, `CATEGORIES`, `MISSING` |
+| Coerción de la respuesta del modelo | `schema.js` → `coerce(item, sourceFile)` |
+| Esquema expresado para el prompt | `schema.js` → `PROMPT_SCHEMA` (llaves dobladas para LangChain) |
+| Identidad entre versiones del corpus | `identity.js` → `key()` = `source_file::title` |
+| Identidad dentro de una extracción | `identity.js` → `titleKey()` (sin tildes ni puntuación) |
+| Descarte de repetidos | `dedupe.js` → `dedupe()`, gana mayor `score` |
+| Parseo de la respuesta del modelo | `fromModelResponse.js` → 4 compuertas que degradan a `[]` |
+
+**Reglas al tocar esto:**
+- Agregar una columna se hace en `FIELDS` y en `coerce()`, nada más; `PROMPT_SCHEMA` la declara
+  para el modelo y `markdownService` la serializa sola.
+- `source_file` nunca viene del modelo: lo impone quien conoce el origen.
+- Ningún servicio debe volver a escribir `'N/A'` a mano: usar `MISSING` y `hasValue()`.
+- `dataService` y `webDataService` solo deben contener su prompt y la invocación de la chain.
 
 ## Flujo de merge (CSVs individuales → merged.csv)
 

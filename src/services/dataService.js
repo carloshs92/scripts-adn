@@ -1,23 +1,14 @@
 import { PromptTemplate } from 'langchain/prompts';
 import { extractMultiplePDFs } from './pdfService.js';
 import { createChatModel } from './llmService.js';
+import { FIELDS, extractWithChain, PROMPT_SCHEMA } from '../milestone/index.js';
 import { logger } from '../utils/logger.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-export const COLUMNS = [
-  'title',
-  'shortDescription',
-  'category',
-  'largeDescription',
-  'company',
-  'year',
-  'score',
-  'source_file',
-];
-
-export const VALID_CATEGORIES = ['sustainability', 'talent', 'innovation', 'security'];
+// Re-export por compatibilidad: el esquema vive en src/milestone/schema.js
+export const COLUMNS = FIELDS;
 
 const EXTRACTION_PROMPT = `Eres un extractor de datos estructurados. Analiza el siguiente documento y extrae el máximo de ítems relevantes.
 
@@ -33,76 +24,11 @@ REGLAS OBLIGATORIAS:
 7. Construcción del Título: El campo title debe ser siempre una frase corta, creativa y descriptiva que resuma el hito o la iniciativa (por ejemplo: "Lanzamiento de Nueva App" o "Programa de Mentoring"). Ignora por completo los nombres de los documentos de origen; está estrictamente prohibido incluir nombres de archivos, rutas o extensiones (como .pdf o .docx) en cualquier parte de la respuesta.
 
 FORMATO DE SALIDA:
-{{
-  "list": [
-    {{
-      "title": "Título conciso del dato",
-      "shortDescription": "Descripción breve (1-2 oraciones)",
-      "category": "sustainability | talent | innovation | security",
-      "largeDescription": "Descripción detallada con contexto completo del documento",
-      "company": "Nombre de la subsidiaria o Intercorp",
-      "year": "Año al que corresponde el dato (si se menciona)",
-      "score": 85
-    }}
-  ]
-}}
+${PROMPT_SCHEMA}
 
 DOCUMENTO:
 {content}`;
 
-
-/**
- * Extrae las filas de un único documento (PDF o Excel) usando la chain de LangChain.
- * @param {Object} pdf - Objeto {fileName, filePath, content}
- * @param {Object} chain - Chain de LangChain lista para invocar
- * @returns {Promise<Array>} Filas extraídas para ese PDF
- */
-async function extractRowsFromContent(pdf, chain) {
-  let responseText;
-  try {
-    const result = await chain.invoke({ content: pdf.content });
-    responseText = result.content.trim();
-  } catch (err) {
-    logger.warn(`Error llamando a OpenAI para ${pdf.fileName}: ${err.message}`);
-    return [];
-  }
-
-  const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    logger.warn(`No se encontró JSON en la respuesta de ${pdf.fileName}`);
-    return [];
-  }
-
-  let parsed;
-  try {
-    parsed = JSON.parse(jsonMatch[0]);
-  } catch {
-    logger.warn(`JSON inválido para ${pdf.fileName}`);
-    return [];
-  }
-
-  if (!Array.isArray(parsed.list)) {
-    logger.warn(`Respuesta sin campo "list" para ${pdf.fileName}`);
-    return [];
-  }
-
-  const rows = parsed.list.map((item) => {
-    const category = VALID_CATEGORIES.includes(item.category) ? item.category : 'innovation';
-    return {
-      title: item.title || 'N/A',
-      shortDescription: item.shortDescription || 'N/A',
-      category,
-      largeDescription: item.largeDescription || 'N/A',
-      company: item.company || 'Intercorp',
-      year: item.year || 'N/A',
-      score: typeof item.score === 'number' ? item.score : 'N/A',
-      source_file: pdf.fileName,
-    };
-  });
-
-  logger.debug(`${rows.length} ítem(s) extraídos de ${pdf.fileName}`);
-  return rows;
-}
 
 /**
  * Extrae datos de cada documento (PDF o Excel) por separado.
@@ -115,8 +41,8 @@ export async function extractDataPerFile(pdfFiles) {
   const results = [];
 
   for (const pdf of pdfContents) {
-    logger.debug(`Extrayendo ítems de: ${pdf.fileName}`);
-    const rows = await extractRowsFromContent(pdf, chain);
+    logger.debug(`Extrayendo hitos de: ${pdf.fileName}`);
+    const rows = await extractWithChain(chain, pdf.content, pdf.fileName);
     results.push({ fileName: pdf.fileName, filePath: pdf.filePath, rows });
   }
 
@@ -124,9 +50,9 @@ export async function extractDataPerFile(pdfFiles) {
 }
 
 /**
- * Extrae hasta 7 ítems estructurados de cada PDF según el schema IItemList.
- * @param {Array<string>} pdfFiles - Rutas de los PDFs
- * @returns {Promise<Array>} Filas listas para escribir en CSV
+ * Extrae los hitos de todos los documentos, en una sola lista
+ * @param {Array<string>} pdfFiles - Rutas de los documentos
+ * @returns {Promise<Array>} Hitos listos para escribir en CSV
  */
 export async function extractData(pdfFiles) {
   const perFile = await extractDataPerFile(pdfFiles);
