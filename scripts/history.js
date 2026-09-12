@@ -70,7 +70,8 @@ function main() {
     const { added, removed, modified, unchanged, sources } = entry.changes;
 
     console.log(chalk.blue(`v${version} — ${formatDate(entry.timestamp)}`));
-    console.log(chalk.gray(`   Archivo  : ${entry.fileName} (${entry.fileId})`));
+    const fileIds = entry.fileIds || (entry.fileId ? [entry.fileId] : []);
+    console.log(chalk.gray(`   Archivo  : ${entry.fileName} (${fileIds.length} en OpenAI)`));
     console.log(chalk.gray(`   Ítems    : ${entry.rowCount}` +
       (entry.previousRowCount > 0 ? ` (antes ${entry.previousRowCount})` : ' — primera versión')));
     console.log(chalk.gray(`   Fuentes  : ${sources.total}`));

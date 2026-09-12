@@ -1,5 +1,5 @@
-import { createObjectCsvWriter } from 'csv-writer';
-import { createReadStream, existsSync } from 'fs';
+import { createObjectCsvWriter, createObjectCsvStringifier } from 'csv-writer';
+import { createReadStream, existsSync, writeFileSync } from 'fs';
 import csv from 'csv-parser';
 import { logger } from '../utils/logger.js';
 
@@ -36,8 +36,9 @@ export async function getColumns(csvPath) {
  */
 export async function create(csvPath, columns) {
   try {
-    const writer = createObjectCsvWriter({
-      path: csvPath,
+    // Se escribe solo la línea de encabezado. Usar writeRecords([]) dejaba una
+    // fila en blanco extra que después se leía como un ítem vacío.
+    const stringifier = createObjectCsvStringifier({
       header: columns.map((col) => ({
         id: col,
         title: col,
@@ -45,7 +46,7 @@ export async function create(csvPath, columns) {
       alwaysQuote: false,
     });
 
-    await writer.writeRecords([]);
+    writeFileSync(csvPath, stringifier.getHeaderString(), 'utf-8');
     logger.debug(`CSV creado: ${csvPath}`);
   } catch (error) {
     throw new Error(`Error creando CSV: ${error.message}`);
@@ -99,7 +100,11 @@ export async function read(csvPath) {
     createReadStream(csvPath)
       .pipe(csv())
       .on('data', (row) => {
-        results.push(row);
+        // Descartar filas totalmente vacías (CSVs generados antes del fix
+        // del encabezado traen una línea en blanco)
+        if (Object.values(row).some((value) => String(value || '').trim() !== '')) {
+          results.push(row);
+        }
       })
       .on('end', () => {
         resolve(results);

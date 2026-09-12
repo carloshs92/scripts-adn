@@ -25,7 +25,7 @@ import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
 import { scrapeWebsite, getDomain } from '../src/services/webScraperService.js';
-import { extractDataFromWeb, COLUMNS } from '../src/services/webDataService.js';
+import { extractDataFromWeb, dedupeRows, COLUMNS } from '../src/services/webDataService.js';
 import * as csvService from '../src/services/csvService.js';
 import { logger } from '../src/utils/logger.js';
 
@@ -53,10 +53,16 @@ const SOURCES = {
   // 'https://www.realplaza.com/',
   // 'https://www.oechsle.pe/',
     'https://app.agora.pe/',
-    'https://sip.pe/',
-    'https://sip.pe/blog',
-    'https://sip.pe/quienes-somos'
-
+    // sip.pe es una SPA de Angular: su HTML no trae texto (las 3 URLs devuelven
+    // el mismo shell vacío). El contenido real vive en su WordPress headless,
+    // accesible solo por API REST + ACF.
+    {
+      urls: ['https://sip.pe/', 'https://sip.pe/blog', 'https://sip.pe/quienes-somos'],
+      wordpress: {
+        origin: 'https://cms.sip.pe',
+        prioritySlugs: ['quienes-somos'],
+      },
+    },
   ],
   health: [
     'https://www.aviva.pe/',
@@ -96,6 +102,43 @@ function getUrlsToProcess() {
   return { category: 'todas', urls: allUrls };
 }
 
+/**
+ * Normaliza una entrada de SOURCES a la forma {urls, wordpress}.
+ * Acepta un string suelto o un objeto con configuración extra.
+ * @param {string|Object} entry
+ * @returns {{urls: Array<string>, wordpress: Object|undefined}}
+ */
+function normalizeEntry(entry) {
+  if (typeof entry === 'string') return { urls: [entry], wordpress: undefined };
+  return { urls: entry.urls || [entry.url], wordpress: entry.wordpress };
+}
+
+/**
+ * Agrupa las fuentes por dominio conservando el orden de SOURCES.
+ * Varias URLs del mismo sitio (home, /blog, /quienes-somos) se scrapean juntas
+ * y producen un único CSV, en vez de sobreescribirse entre sí.
+ * @param {Array<string|Object>} entries
+ * @returns {Array<{domain: string, urls: Array<string>, wordpress: Object|undefined}>}
+ */
+function groupByDomain(entries) {
+  const groups = new Map();
+
+  for (const entry of entries) {
+    const { urls, wordpress } = normalizeEntry(entry);
+    const domain = getDomain(urls[0]);
+
+    if (!groups.has(domain)) groups.set(domain, { domain, urls: [], wordpress: undefined });
+    const group = groups.get(domain);
+
+    for (const url of urls) {
+      if (!group.urls.includes(url)) group.urls.push(url);
+    }
+    if (wordpress) group.wordpress = wordpress;
+  }
+
+  return [...groups.values()];
+}
+
 async function main() {
   console.log(chalk.blue.bold('\n🌐 Web Scraper Inteligente — LangChain + OpenAI\n'));
 
@@ -105,8 +148,11 @@ async function main() {
   }
 
   const { category, urls } = getUrlsToProcess();
+  const sites = groupByDomain(urls);
+  const urlCount = sites.reduce((sum, site) => sum + site.urls.length, 0);
+
   console.log(chalk.cyan(`Categoría  : ${category}`));
-  console.log(chalk.cyan(`Sitios     : ${urls.length}`));
+  console.log(chalk.cyan(`Sitios     : ${sites.length} (${urlCount} URL(s))`));
   console.log(chalk.cyan(`Output     : ${OUTPUT_DIR}/\n`));
 
   if (!fs.existsSync(OUTPUT_DIR)) {
@@ -117,18 +163,23 @@ async function main() {
   let succeeded = 0;
   let failed = 0;
 
-  for (const url of urls) {
-    const domain = getDomain(url);
+  for (const { domain, urls: siteUrls, wordpress } of sites) {
     const csvName = `web-${domain}.csv`;
     const csvPath = path.join(OUTPUT_DIR, csvName);
 
     console.log(chalk.blue(`\n┌── ${domain}`));
+    if (siteUrls.length > 1) {
+      console.log(chalk.gray(`│  ${siteUrls.length} URLs: ${siteUrls.join(', ')}`));
+    }
+    if (wordpress) {
+      console.log(chalk.gray(`│  CMS headless: ${wordpress.origin}`));
+    }
 
-    // 1. Scraping de la web
+    // 1. Scraping de la web (todas las URLs del dominio en una sola pasada)
     let scraped;
     try {
       process.stdout.write(chalk.yellow(`│  ⏳ Scrapeando...`));
-      scraped = await scrapeWebsite(url);
+      scraped = await scrapeWebsite(siteUrls, { wordpress });
       process.stdout.write(
         `\r${chalk.green(`│  ✅ ${scraped.pagesScraped} página(s) obtenidas`)}\n`
       );
@@ -139,12 +190,18 @@ async function main() {
       continue;
     }
 
-    // 2. Extracción de ítems con OpenAI
+    // 2. Extracción de ítems con OpenAI (ya viene sin duplicados)
     process.stdout.write(chalk.yellow(`│  ⏳ Extrayendo ítems con OpenAI...`));
-    const rows = await extractDataFromWeb(scraped);
+    const extracted = await extractDataFromWeb(scraped);
     process.stdout.write(
-      `\r${chalk.green(`│  ✅ ${rows.length} ítem(s) extraídos`)}\n`
+      `\r${chalk.green(`│  ✅ ${extracted.length} ítem(s) extraídos`)}\n`
     );
+
+    // 3. Segunda pasada de deduplicación sobre lo que se va a escribir
+    const { rows, duplicates } = dedupeRows(extracted);
+    if (duplicates > 0) {
+      console.log(chalk.yellow(`│  ♻️  ${duplicates} duplicado(s) descartado(s)`));
+    }
 
     if (rows.length === 0) {
       logger.warn(`Sin datos extraídos de ${domain}`);
@@ -153,10 +210,10 @@ async function main() {
       continue;
     }
 
-    // 3. Guardar CSV individual (sobreescribe si ya existe)
+    // 4. Guardar CSV individual (sobreescribe si ya existe)
     await csvService.create(csvPath, COLUMNS);
     await csvService.addRows(csvPath, rows, COLUMNS);
-    console.log(chalk.green(`│  💾 ${csvName}`));
+    console.log(chalk.green(`│  💾 ${csvName} → ${rows.length} ítem(s)`));
     console.log(chalk.blue(`└──\n`));
 
     totalItems += rows.length;
@@ -165,7 +222,7 @@ async function main() {
 
   // ─── Resumen ───────────────────────────────────────────────────────────────
   console.log(chalk.blue('═'.repeat(50)));
-  console.log(chalk.green(`✅ Sitios completados : ${succeeded}/${urls.length}`));
+  console.log(chalk.green(`✅ Sitios completados : ${succeeded}/${sites.length}`));
   if (failed > 0) {
     console.log(chalk.red(`❌ Fallidos           : ${failed}`));
   }

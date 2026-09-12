@@ -25,6 +25,9 @@ src/
 │   ├── xlsxService.js    # Extracción de texto de archivos Excel (.xlsx/.xlsm/.xls)
 │   ├── dataService.js    # Extracción de datos con LangChain + OpenAI
 │   ├── csvService.js     # Creación y escritura de CSVs
+│   ├── webScraperService.js # Scraping de sitios web (agrupa URLs por dominio)
+│   ├── wordpressService.js  # Lectura de CMS headless vía REST + ACF (sitios SPA)
+│   ├── webDataService.js # Extracción de ítems desde contenido web + dedupe
 │   ├── driveService.js   # Upload de CSVs a Google Drive como Sheets
 │   └── historyService.js # Snapshots y diff entre versiones del vector store
 ├── cli/
@@ -95,19 +98,50 @@ MERGED_NAME                # Opcional, default: merged.csv
 3. Genera `output/merged.csv` con todas las filas combinadas
 4. Respeta el orden de columnas del primer CSV con datos
 
+## Flujo de scraping web (webs → CSV por dominio)
+
+1. `scripts/scrape-web.js` define las fuentes en `SOURCES`, agrupadas por categoría.
+   Una entrada puede ser un string (`'https://x.pe/'`) o un objeto con varias URLs
+   y configuración extra: `{ urls: [...], wordpress: { origin, prioritySlugs } }`
+2. `groupByDomain()` junta todas las URLs de un mismo dominio en **una sola pasada**
+   y **un solo CSV** (`output/web-<dominio>.csv`). Sin esto, dos URLs del mismo sitio
+   generaban el mismo nombre de archivo y se pisaban entre sí
+3. `scrapeWebsite(urls, { wordpress })` descarga las URLs indicadas, descubre subpáginas
+   de contenido (blog/noticias/prensa) y arma el texto para el modelo
+4. **Sitios SPA** (Angular/React) devuelven HTML sin texto. Para esos se declara
+   `wordpress.origin` y `wordpressService` trae el contenido real del CMS headless por
+   `wp-json/wp/v2/{pages,posts}` + `wp-json/acf/v3/...`. `prioritySlugs` se piden por slug
+   (el listado general viene ordenado por fecha y puede no incluirlos)
+5. El contenido se arma por prioridad: páginas institucionales y semillas primero,
+   subpáginas después, cada una limitada a `MAX_PAGE_CHARS` y el total a `MAX_CONTENT_CHARS`
+6. `webDataService.extractDataFromWeb()` extrae los ítems y `dedupeRows()` descarta
+   títulos repetidos (normalizando tildes/puntuación), conservando el de mayor `score`
+
+**Ejemplo real**: `sip.pe` es una SPA cuyas 3 URLs devuelven el mismo shell vacío;
+su contenido vive en `cms.sip.pe`.
+
 ## Flujo de actualización del vector store (merged.csv → OpenAI)
 
-1. `update-vector-store.js` convierte `output/merged.csv` a Markdown (`## <title>` por fila).
-   **El `file_search` de OpenAI no acepta `.csv`**, por eso la conversión es obligatoria;
-   además el Markdown se divide en chunks más coherentes para la búsqueda semántica.
-2. Sube el `.md` (a un temporal del sistema, no a `output/`), lo asocia al store y espera el `completed`
-3. **Recién entonces** elimina los archivos anteriores, para que el store nunca quede vacío si algo falla
+1. `update-vector-store.js` convierte `output/merged.csv` a Markdown, **un archivo por
+   `source_file`** (`## <title>` por fila). Dos razones:
+   - **El `file_search` de OpenAI no acepta `.csv`**, así que convertir es obligatorio
+   - Con un único `.md` grande, cada chunk mezclaba ítems de empresas distintas (el chunk
+     con "Qué es Sip" empezaba con un ítem de UTP) y su embedding dejaba de representar a
+     ninguna. Un archivo por fuente mantiene cada chunk dentro de un mismo contexto
+2. Sube los `.md` (a un temporal del sistema, no a `output/`) y los asocia con
+   `fileBatches` usando chunking `static` de 400 tokens / 100 de solape
+3. **Recién cuando el lote está `completed`** elimina los archivos anteriores, para que el
+   store nunca quede vacío si algo falla
 4. `historyService.recordVersion()` guarda un snapshot del CSV en `history/snapshots/` y anota en
-   `history/history.json` qué cambió respecto de la versión anterior
+   `history/history.json` qué cambió respecto de la versión anterior, junto con los `fileIds` subidos
 5. `npm run history` muestra esa línea de tiempo
 
 El diff identifica cada ítem por `source_file` + `title`, y para los modificados registra qué campos
 cambiaron. `history/` está ignorado por git.
+
+**Cuidado con el listado de archivos del store**: `vectorStores.files.list()` devuelve menos
+archivos de los que reporta `file_counts` (verificado: 24 de 31). Por eso los archivos a eliminar
+salen de los `fileIds` guardados en el historial, unidos a lo que devuelva el listado.
 
 ## Flujo de sincronización (CSV → Google Drive)
 

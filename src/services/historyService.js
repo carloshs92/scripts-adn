@@ -114,12 +114,12 @@ export async function loadLastSnapshotRows() {
  * historial qué cambió respecto de la versión anterior.
  * @param {Object} params
  * @param {string} params.csvPath - CSV que se subió al vector store
- * @param {string} params.fileId - ID del archivo en OpenAI
- * @param {string} params.fileName - Nombre del archivo subido
+ * @param {Array<string>} params.fileIds - IDs de los archivos en OpenAI
+ * @param {string} params.fileName - Descripción de lo subido
  * @param {number} params.bytes - Tamaño del contenido subido
  * @returns {Promise<Object>} Entrada creada
  */
-export async function recordVersion({ csvPath, fileId, fileName, bytes }) {
+export async function recordVersion({ csvPath, fileIds, fileName, bytes }) {
   fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
 
   const previousRows = await loadLastSnapshotRows();
@@ -133,7 +133,7 @@ export async function recordVersion({ csvPath, fileId, fileName, bytes }) {
 
   const entry = {
     timestamp,
-    fileId,
+    fileIds,
     fileName,
     bytes,
     rowCount: currentRows.length,

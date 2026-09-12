@@ -25,6 +25,8 @@ REGLAS OBLIGATORIAS:
 6. Extrae el máximo de ítems posibles. La precisión es más importante que la cantidad.
 7. Responde ÚNICAMENTE con un objeto JSON válido. Sin texto adicional antes ni después.
 8. El campo title debe ser una frase corta (máx. 8 palabras), creativa y descriptiva del hito o iniciativa. Nunca incluyas URLs, dominios ni nombres de archivo.
+9. PRIORIDAD MÁXIMA: si el contenido incluye una página institucional (quiénes somos, nosotros, sobre nosotros, about, conócenos), el PRIMER ítem de la lista debe responder de forma directa "¿Qué es esta empresa?". Ese ítem debe titularse "Qué es <Nombre de la empresa>", resumir en largeDescription a qué se dedica, qué ofrece, a quién atiende y qué la distingue, y llevar score 95 o más.
+10. No repitas ítems: si dos páginas describen la misma iniciativa, produce un solo ítem consolidando la información de ambas. Cada title debe ser único dentro de la respuesta.
 
 FORMATO DE SALIDA:
 {{
@@ -49,6 +51,60 @@ function createModel() {
     openaiApiKey,
     modelName,
   });
+}
+
+/**
+ * Normaliza un título para comparar duplicados: minúsculas, sin tildes,
+ * sin puntuación y sin espacios repetidos.
+ * @param {string} title
+ * @returns {string}
+ */
+function normalizeTitle(title) {
+  return String(title || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Elimina ítems duplicados por título, conservando el de mayor score.
+ * El modelo puede repetir una misma iniciativa cuando aparece en varias
+ * páginas del mismo sitio (home, blog, quiénes somos).
+ * @param {Array<Object>} rows - Filas extraídas
+ * @returns {{rows: Array<Object>, duplicates: number}}
+ */
+export function dedupeRows(rows) {
+  const byTitle = new Map();
+  let duplicates = 0;
+
+  for (const row of rows) {
+    const key = normalizeTitle(row.title);
+    if (key === '') continue;
+
+    const existing = byTitle.get(key);
+    if (!existing) {
+      byTitle.set(key, row);
+      continue;
+    }
+
+    duplicates++;
+    // Conservar el ítem con mayor score (o el más descriptivo si empatan)
+    const currentScore = typeof row.score === 'number' ? row.score : 0;
+    const existingScore = typeof existing.score === 'number' ? existing.score : 0;
+
+    if (
+      currentScore > existingScore ||
+      (currentScore === existingScore &&
+        String(row.largeDescription).length > String(existing.largeDescription).length)
+    ) {
+      byTitle.set(key, row);
+    }
+  }
+
+  return { rows: [...byTitle.values()], duplicates };
 }
 
 /**
@@ -101,9 +157,14 @@ export async function extractDataFromWeb({ url, domain, content }) {
     };
   });
 
-  logger.debug(`${rows.length} ítem(s) extraídos de ${domain}`);
-  return rows;
+  const { rows: unique, duplicates } = dedupeRows(rows);
+  if (duplicates > 0) {
+    logger.debug(`${duplicates} ítem(s) duplicados descartados en ${domain}`);
+  }
+
+  logger.debug(`${unique.length} ítem(s) extraídos de ${domain}`);
+  return unique;
 }
 
 export { COLUMNS };
-export default { extractDataFromWeb, COLUMNS };
+export default { extractDataFromWeb, dedupeRows, COLUMNS };
