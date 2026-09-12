@@ -36,6 +36,7 @@ import path from 'path';
 import chalk from 'chalk';
 import OpenAI from 'openai';
 import * as csvService from '../src/services/csvService.js';
+import { groupBySource, buildSourceMarkdown } from '../src/services/markdownService.js';
 import { recordVersion, loadHistory } from '../src/services/historyService.js';
 
 dotenv.config();
@@ -61,21 +62,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/**
- * Convierte una fila del CSV en una sección Markdown autocontenida.
- * @param {Object} row - Fila del CSV
- * @param {number} index - Posición, usada solo si falta el título
- * @returns {string}
- */
-function rowToSection(row, index) {
-  const title = row.title && row.title !== 'N/A' ? row.title : `Ítem ${index + 1}`;
-  const fields = Object.entries(row)
-    .filter(([key, value]) => key !== 'title' && value && value !== 'N/A')
-    .map(([key, value]) => `- **${key}**: ${String(value).replace(/\s+/g, ' ').trim()}`);
-
-  return `## ${title}\n${fields.join('\n')}`;
 }
 
 /**
@@ -106,21 +92,13 @@ async function csvToMarkdown(csvPath) {
     throw new Error(`${csvPath} no contiene filas`);
   }
 
-  // Agrupar por documento de origen conservando el orden de aparición
-  const bySource = new Map();
-  for (const row of rows) {
-    const source = row.source_file || 'sin-fuente';
-    if (!bySource.has(source)) bySource.set(source, []);
-    bySource.get(source).push(row);
-  }
-
+  const bySource = groupBySource(rows);
   const outputDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vector-store-'));
   const files = [];
   let bytes = 0;
 
   for (const [source, sourceRows] of bySource) {
-    const sections = sourceRows.map(rowToSection);
-    const markdown = `# ${source}\n\nFuente: ${source}\n\n${sections.join('\n\n')}\n`;
+    const markdown = buildSourceMarkdown(source, sourceRows);
     const filePath = path.join(outputDir, toFileName(source));
 
     fs.writeFileSync(filePath, markdown, 'utf-8');

@@ -7,7 +7,7 @@ Script Node.js que convierte PDFs a CSV usando LangChain + OpenAI, con soporte p
 ## Stack
 
 - **Runtime**: Node.js 16+ con ES Modules (`"type": "module"`)
-- **IA**: LangChain (`@langchain/openai`, `@langchain/community`) + OpenAI GPT
+- **IA**: LangChain (`@langchain/openai`, `@langchain/community`) sobre OpenRouter u OpenAI (intercambiables: OpenRouter expone un API compatible)
 - **PDFs**: `pdf-parse`
 - **CSV**: `csv-writer`, `csv-parser`
 - **Google Drive**: `googleapis` con Service Account
@@ -23,7 +23,9 @@ src/
 ├── services/
 │   ├── pdfService.js     # Búsqueda de documentos y extracción de texto (PDF y Excel)
 │   ├── xlsxService.js    # Extracción de texto de archivos Excel (.xlsx/.xlsm/.xls)
-│   ├── dataService.js    # Extracción de datos con LangChain + OpenAI
+│   ├── llmService.js     # Proveedor de LLM (OpenRouter u OpenAI) y creación del modelo
+│   ├── markdownService.js # Conversión de filas del CSV a Markdown (por fuente o corpus único)
+│   ├── dataService.js    # Extracción de datos con LangChain
 │   ├── csvService.js     # Creación y escritura de CSVs
 │   ├── webScraperService.js # Scraping de sitios web (agrupa URLs por dominio)
 │   ├── wordpressService.js  # Lectura de CMS headless vía REST + ACF (sitios SPA)
@@ -48,6 +50,7 @@ scripts/
 ```bash
 npm start              # CLI interactivo: convierte PDFs y Excel → un CSV por documento en output/
 npm run merge:csv      # Combina todos los CSVs de output/ en output/merged.csv
+npm run export:corpus  # Exporta merged.csv como Markdown (--app lo escribe en intercorp-adn/data/milestones.md)
 npm test               # Verifica que la instalación esté correcta
 npm run example        # Ejemplo de uso programático
 npm run sync:spreadsheet  # Sube todos los CSVs de output/ a Google Drive (en proceso)
@@ -58,8 +61,10 @@ npm run history        # Muestra el historial de versiones del vector store (--d
 ## Variables de entorno requeridas
 
 ```
-OPENAI_API_KEY             # Requerida para la conversión PDF → CSV
-OPENAI_MODEL               # Opcional, default: gpt-4o-mini
+OPENAI_API_KEY             # Requerida para update:vector (y para la extracción si LLM_PROVIDER=openai)
+OPENROUTER_API_KEY         # Requerida si LLM_PROVIDER=openrouter
+LLM_PROVIDER               # Opcional: openrouter | openai. Sin definir usa openrouter si hay key suya
+LLM_MODEL                  # Opcional, default: openai/gpt-4o-mini (OpenRouter) o gpt-4o-mini (OpenAI)
 GOOGLE_SERVICE_ACCOUNT_KEY # Ruta al JSON de service account (para sync)
 GOOGLE_DRIVE_FOLDER_ID     # ID de la carpeta destino en Drive (para sync)
 VECTOR_STORE_ID            # ID del vector store de OpenAI (para update:vector)
@@ -142,6 +147,31 @@ cambiaron. `history/` está ignorado por git.
 **Cuidado con el listado de archivos del store**: `vectorStores.files.list()` devuelve menos
 archivos de los que reporta `file_counts` (verificado: 24 de 31). Por eso los archivos a eliminar
 salen de los `fileIds` guardados en el historial, unidos a lo que devuelva el listado.
+
+## Proveedor de LLM (OpenRouter u OpenAI)
+
+`llmService.createChatModel()` es el único punto que instancia el modelo; `dataService` y
+`webDataService` lo usan. OpenRouter expone un API compatible con el de OpenAI, así que solo
+cambian `baseURL` y la key — prompts, parseo de JSON y LangChain quedan igual.
+
+Verificado: `openai/gpt-4o-mini` por OpenRouter consume los mismos tokens y da la misma calidad
+que el directo, al mismo precio ($0.15/$0.60 por 1M).
+
+**Cuidado con los modelos de razonamiento**: `gpt-5-nano` parece 3x más barato por token, pero
+genera ~8x más tokens de salida y termina costando más. Y los modelos chicos no-OpenAI
+(`mistral-nemo`) rompen el JSON que el pipeline necesita.
+
+**El vector store sigue en OpenAI**: OpenRouter no tiene `/vector_stores` (404), así que
+`update-vector-store.js` usa `OPENAI_API_KEY` sin importar `LLM_PROVIDER`.
+
+## Exportar el corpus para la app (merged.csv → milestones.md)
+
+`npm run export:corpus -- --app` escribe `../intercorp-adn/data/milestones.md`, que es la entrada
+de `build-graph.mjs` y por lo tanto del índice de búsqueda rápida de la app.
+
+Antes ese archivo se exportaba a mano desde el vector store y quedaba desactualizado en silencio:
+la app respondía con datos viejos sin que nada fallara. Después de cada `merge:csv` conviene
+correr también este export y regenerar el índice en la app.
 
 ## Flujo de sincronización (CSV → Google Drive)
 

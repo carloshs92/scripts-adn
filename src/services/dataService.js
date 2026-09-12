@@ -1,17 +1,10 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from 'langchain/prompts';
 import { extractMultiplePDFs } from './pdfService.js';
+import { createChatModel } from './llmService.js';
 import { logger } from '../utils/logger.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
-const openaiApiKey = process.env.OPENAI_API_KEY;
-const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
-if (!openaiApiKey) {
-  throw new Error('OPENAI_API_KEY no está definida en el archivo .env');
-}
 
 export const COLUMNS = [
   'title',
@@ -57,12 +50,6 @@ FORMATO DE SALIDA:
 DOCUMENTO:
 {content}`;
 
-function createModel() {
-  return new ChatOpenAI({
-    openaiApiKey,
-    modelName
-  });
-}
 
 /**
  * Extrae las filas de un único documento (PDF o Excel) usando la chain de LangChain.
@@ -124,7 +111,7 @@ async function extractRowsFromContent(pdf, chain) {
  */
 export async function extractDataPerFile(pdfFiles) {
   const pdfContents = await extractMultiplePDFs(pdfFiles);
-  const chain = PromptTemplate.fromTemplate(EXTRACTION_PROMPT).pipe(createModel());
+  const chain = PromptTemplate.fromTemplate(EXTRACTION_PROMPT).pipe(createChatModel());
   const results = [];
 
   for (const pdf of pdfContents) {

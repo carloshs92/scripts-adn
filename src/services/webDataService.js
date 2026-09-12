@@ -1,17 +1,10 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from 'langchain/prompts';
 import { COLUMNS, VALID_CATEGORIES } from './dataService.js';
+import { createChatModel } from './llmService.js';
 import { logger } from '../utils/logger.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
-
-const openaiApiKey = process.env.OPENAI_API_KEY;
-const modelName = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-
-if (!openaiApiKey) {
-  throw new Error('OPENAI_API_KEY no está definida en el archivo .env');
-}
 
 // Prompt específico para contenido web: más enfocado en noticias, productos e iniciativas
 const WEB_EXTRACTION_PROMPT = `Eres un analista de información corporativa especializado en el ecosistema Intercorp. Analiza el siguiente contenido extraído de páginas web de una empresa del grupo y extrae todos los ítems relevantes sobre sus iniciativas, productos, logros y noticias.
@@ -46,12 +39,6 @@ FORMATO DE SALIDA:
 CONTENIDO WEB:
 {content}`;
 
-function createModel() {
-  return new ChatOpenAI({
-    openaiApiKey,
-    modelName,
-  });
-}
 
 /**
  * Normaliza un título para comparar duplicados: minúsculas, sin tildes,
@@ -113,7 +100,7 @@ export function dedupeRows(rows) {
  * @returns {Promise<Array>} Filas listas para escribir en CSV (mismo formato que dataService)
  */
 export async function extractDataFromWeb({ url, domain, content }) {
-  const chain = PromptTemplate.fromTemplate(WEB_EXTRACTION_PROMPT).pipe(createModel());
+  const chain = PromptTemplate.fromTemplate(WEB_EXTRACTION_PROMPT).pipe(createChatModel());
 
   let responseText;
   try {
