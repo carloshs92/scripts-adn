@@ -53,10 +53,17 @@ async function verificarInstalacion() {
   if (envExiste) {
     console.log('  ✅ Archivo .env encontrado');
     const envContent = fs.readFileSync('.env', 'utf-8');
-    if (envContent.includes('sk-proj-') || envContent.includes('sk-')) {
-      console.log('  ✅ OPENAI_API_KEY configurada');
-    } else if (!envContent.includes('sk-your-api-key')) {
-      console.log('  ⚠️  OPENAI_API_KEY no configurada o vacía');
+    const tieneKey = (nombre) => new RegExp(`^${nombre}=\\s*\\S+`, 'm').test(envContent);
+
+    // La extracción usa OpenRouter u OpenAI; el vector store solo OpenAI
+    if (tieneKey('OPENROUTER_API_KEY')) {
+      console.log('  ✅ OPENROUTER_API_KEY configurada (extracción)');
+    }
+    if (tieneKey('OPENAI_API_KEY')) {
+      console.log('  ✅ OPENAI_API_KEY configurada (update:vector)');
+    }
+    if (!tieneKey('OPENROUTER_API_KEY') && !tieneKey('OPENAI_API_KEY')) {
+      console.log('  ⚠️  Sin key de LLM: define OPENROUTER_API_KEY u OPENAI_API_KEY');
       console.log('     Edita .env y añade tu API key');
     }
   } else {
