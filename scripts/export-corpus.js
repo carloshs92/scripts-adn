@@ -23,6 +23,7 @@ import path from 'path';
 import chalk from 'chalk';
 import * as csvService from '../src/services/csvService.js';
 import { buildCorpusMarkdown, groupBySource } from '../src/services/markdownService.js';
+import { recordVersion } from '../src/services/historyService.js';
 
 dotenv.config();
 
@@ -49,6 +50,38 @@ function resolveOutPath() {
   }
 
   return path.join(OUTPUT_DIR, 'milestones.md');
+}
+
+/**
+ * Registra la versión publicada y muestra qué cambió desde la anterior.
+ * El historial colgaba de la subida al vector store; al retirarse esa vía,
+ * el export del corpus pasa a ser el hito que vale la pena versionar.
+ * @param {string} outPath - Dónde se escribió el corpus
+ * @param {number} bytes - Tamaño del Markdown generado
+ */
+async function saveHistory(outPath, bytes) {
+  const entry = await recordVersion({ csvPath: MERGED_PATH, target: outPath, bytes });
+  const { added, removed, modified, unchanged, sources } = entry.changes;
+
+  if (entry.previousRowCount === 0) {
+    console.log(chalk.green(`\n   ✓ Primera versión registrada: ${entry.rowCount} ítem(s)`));
+  } else {
+    console.log(
+      chalk.green(`\n   ✓ ${entry.previousRowCount} → ${entry.rowCount} ítem(s)`) +
+        chalk.gray(
+          `  (+${added.length} nuevos, -${removed.length} eliminados, ` +
+            `~${modified.length} modificados, ${unchanged} sin cambios)`
+        )
+    );
+    if (sources.added.length > 0) {
+      console.log(chalk.gray(`   Fuentes nuevas    : ${sources.added.join(', ')}`));
+    }
+    if (sources.removed.length > 0) {
+      console.log(chalk.gray(`   Fuentes eliminadas: ${sources.removed.join(', ')}`));
+    }
+  }
+
+  console.log(chalk.gray(`   Historial completo: npm run history`));
 }
 
 async function main() {
@@ -87,6 +120,9 @@ async function main() {
         (previousSize ? ` (antes ${(previousSize / 1024).toFixed(1)} KB)` : '')
     )
   );
+
+  await saveHistory(outPath, Buffer.byteLength(markdown));
+
   console.log(chalk.cyan('\n   Luego, en intercorp-adn: node scripts/build-graph.mjs\n'));
 }
 

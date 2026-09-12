@@ -2,7 +2,7 @@
 
 ## Propósito del proyecto
 
-Script Node.js que convierte PDFs a CSV usando LangChain + OpenAI, con soporte para sincronizar los CSVs generados a Google Drive como Google Sheets. Desarrollado para Intercorp ADN.
+Script Node.js que convierte PDFs, Excel y sitios web a CSV usando LangChain sobre OpenRouter, exporta el corpus que consume la app `intercorp-adn` y sincroniza los CSVs a Google Drive. Desarrollado para Intercorp ADN.
 
 ## Stack
 
@@ -31,7 +31,7 @@ src/
 │   ├── wordpressService.js  # Lectura de CMS headless vía REST + ACF (sitios SPA)
 │   ├── webDataService.js # Extracción de ítems desde contenido web + dedupe
 │   ├── driveService.js   # Upload de CSVs a Google Drive como Sheets
-│   └── historyService.js # Snapshots y diff entre versiones del vector store
+│   └── historyService.js # Snapshots y diff entre versiones del corpus
 ├── cli/
 │   └── interactive.js    # Flujo interactivo CLI con inquirer
 └── utils/
@@ -40,8 +40,8 @@ src/
     └── validator.js      # Validación de rutas y config
 scripts/
 ├── sync-spreadsheet.js   # Sube output/*.csv a Google Drive
-├── update-vector-store.js # Actualiza el vector store de OpenAI + registra la versión
-├── history.js            # Muestra el historial de versiones del vector store
+├── export-corpus.js      # Exporta merged.csv como Markdown + registra la versión
+├── history.js            # Muestra el historial de versiones del corpus
 └── test-setup.js         # Verifica instalación
 ```
 
@@ -54,20 +54,18 @@ npm run export:corpus  # Exporta merged.csv como Markdown (--app lo escribe en i
 npm test               # Verifica que la instalación esté correcta
 npm run example        # Ejemplo de uso programático
 npm run sync:spreadsheet  # Sube todos los CSVs de output/ a Google Drive (en proceso)
-npm run update:vector  # Sube output/merged.csv (como Markdown) al vector store de OpenAI
-npm run history        # Muestra el historial de versiones del vector store (--detail, --last)
+npm run history        # Muestra el historial de versiones del corpus (--detail, --last)
 ```
 
 ## Variables de entorno requeridas
 
 ```
-OPENAI_API_KEY             # Requerida para update:vector (y para la extracción si LLM_PROVIDER=openai)
-OPENROUTER_API_KEY         # Requerida si LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY         # Requerida (LLM_PROVIDER=openrouter, el default)
+OPENAI_API_KEY             # Solo si se vuelve a LLM_PROVIDER=openai
 LLM_PROVIDER               # Opcional: openrouter | openai. Sin definir usa openrouter si hay key suya
 LLM_MODEL                  # Opcional, default: openai/gpt-4o-mini (OpenRouter) o gpt-4o-mini (OpenAI)
 GOOGLE_SERVICE_ACCOUNT_KEY # Ruta al JSON de service account (para sync)
 GOOGLE_DRIVE_FOLDER_ID     # ID de la carpeta destino en Drive (para sync)
-VECTOR_STORE_ID            # ID del vector store de OpenAI (para update:vector)
 OUTPUT_DIR                 # Opcional, default: ./output
 MERGED_NAME                # Opcional, default: merged.csv
 ```
@@ -125,29 +123,6 @@ MERGED_NAME                # Opcional, default: merged.csv
 **Ejemplo real**: `sip.pe` es una SPA cuyas 3 URLs devuelven el mismo shell vacío;
 su contenido vive en `cms.sip.pe`.
 
-## Flujo de actualización del vector store (merged.csv → OpenAI)
-
-1. `update-vector-store.js` convierte `output/merged.csv` a Markdown, **un archivo por
-   `source_file`** (`## <title>` por fila). Dos razones:
-   - **El `file_search` de OpenAI no acepta `.csv`**, así que convertir es obligatorio
-   - Con un único `.md` grande, cada chunk mezclaba ítems de empresas distintas (el chunk
-     con "Qué es Sip" empezaba con un ítem de UTP) y su embedding dejaba de representar a
-     ninguna. Un archivo por fuente mantiene cada chunk dentro de un mismo contexto
-2. Sube los `.md` (a un temporal del sistema, no a `output/`) y los asocia con
-   `fileBatches` usando chunking `static` de 400 tokens / 100 de solape
-3. **Recién cuando el lote está `completed`** elimina los archivos anteriores, para que el
-   store nunca quede vacío si algo falla
-4. `historyService.recordVersion()` guarda un snapshot del CSV en `history/snapshots/` y anota en
-   `history/history.json` qué cambió respecto de la versión anterior, junto con los `fileIds` subidos
-5. `npm run history` muestra esa línea de tiempo
-
-El diff identifica cada ítem por `source_file` + `title`, y para los modificados registra qué campos
-cambiaron. `history/` está ignorado por git.
-
-**Cuidado con el listado de archivos del store**: `vectorStores.files.list()` devuelve menos
-archivos de los que reporta `file_counts` (verificado: 24 de 31). Por eso los archivos a eliminar
-salen de los `fileIds` guardados en el historial, unidos a lo que devuelva el listado.
-
 ## Proveedor de LLM (OpenRouter u OpenAI)
 
 `llmService.createChatModel()` es el único punto que instancia el modelo; `dataService` y
@@ -161,8 +136,9 @@ que el directo, al mismo precio ($0.15/$0.60 por 1M).
 genera ~8x más tokens de salida y termina costando más. Y los modelos chicos no-OpenAI
 (`mistral-nemo`) rompen el JSON que el pipeline necesita.
 
-**El vector store sigue en OpenAI**: OpenRouter no tiene `/vector_stores` (404), así que
-`update-vector-store.js` usa `OPENAI_API_KEY` sin importar `LLM_PROVIDER`.
+**El vector store se dio de baja.** OpenRouter no tiene `/vector_stores` (404), pero tampoco hacía
+falta: la app dejó de consultarlo al pasar a la búsqueda rápida con índice local. Con él se retiró
+`update-vector-store.js`, y el histórico —que colgaba de esa subida— pasó a `export:corpus`.
 
 ## Exportar el corpus para la app (merged.csv → milestones.md)
 
