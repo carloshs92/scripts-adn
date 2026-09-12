@@ -8,6 +8,7 @@ build/
 .DS_Store
 output/
 pdfs/
+history/
 *.csv
 .pdf-registry.json
 credentials/

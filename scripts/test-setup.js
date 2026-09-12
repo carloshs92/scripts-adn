@@ -18,6 +18,7 @@ async function verificarInstalacion() {
     { archivo: 'src/index.js', descripcion: 'Script principal' },
     { archivo: 'src/config.js', descripcion: 'Configuración' },
     { archivo: 'src/services/pdfService.js', descripcion: 'Servicio de PDF' },
+    { archivo: 'src/services/xlsxService.js', descripcion: 'Servicio de Excel' },
     { archivo: 'src/services/dataService.js', descripcion: 'Servicio de datos' },
     { archivo: 'src/services/csvService.js', descripcion: 'Servicio de CSV' },
     { archivo: 'src/cli/interactive.js', descripcion: 'CLI interactiva' },

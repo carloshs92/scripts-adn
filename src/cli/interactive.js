@@ -14,8 +14,8 @@ async function askForPDFPath() {
     {
       type: 'input',
       name: 'pdfPath',
-      message: 'Ingresa la ruta de los PDFs (ej: ./pdfs/*.pdf o ./pdfs/archivo.pdf):',
-      default: './pdfs/*.pdf',
+      message: 'Ingresa la ruta de los documentos (ej: ./pdfs/*.pdf, ./pdfs/*.xlsx o ./pdfs/archivo.xlsx):',
+      default: './pdfs/*.{pdf,xlsx,xlsm,xls}',
     },
   ]);
 
@@ -23,25 +23,45 @@ async function askForPDFPath() {
   return answer.pdfPath;
 }
 
-export async function run() {
-  logger.header('📄 PDF to CSV Converter con LangChain');
+/**
+ * Genera el nombre del CSV a partir del documento origen, evitando que
+ * dos archivos con el mismo nombre base (informe.pdf / informe.xlsx)
+ * se pisen entre sí dentro de una misma corrida.
+ * @param {string} fileName - Nombre del documento origen
+ * @param {Set<string>} usedNames - Nombres ya asignados en esta corrida
+ * @returns {string} Nombre del CSV
+ */
+function buildCSVName(fileName, usedNames) {
+  const { name, ext } = path.parse(fileName);
+  let csvName = `${name}.csv`;
+
+  if (usedNames.has(csvName)) {
+    csvName = `${name}-${ext.replace('.', '')}.csv`;
+  }
+
+  usedNames.add(csvName);
+  return csvName;
+}
+
+export async function run({ pdfArg } = {}) {
+  logger.header('📄 PDF / Excel to CSV Converter con LangChain');
 
   try {
-    // Paso 1: Localizar PDFs
-    logger.section('Paso 1: Localizando PDFs');
-    const pdfPath = await askForPDFPath();
+    // Paso 1: Localizar documentos
+    logger.section('Paso 1: Localizando documentos');
+    const pdfPath = pdfArg ?? await askForPDFPath();
 
-    logger.processing('Buscando archivos PDF...');
+    logger.processing('Buscando archivos PDF y Excel...');
     const pdfFiles = await findPDFs(pdfPath);
 
     if (pdfFiles.length === 0) {
-      logger.error('No se encontraron archivos PDF en la ruta especificada.');
+      logger.error('No se encontraron archivos PDF ni Excel en la ruta especificada.');
       return;
     }
 
-    logger.success(`Se encontraron ${pdfFiles.length} archivo(s) PDF`);
+    logger.success(`Se encontraron ${pdfFiles.length} archivo(s) para procesar`);
 
-    // Filtrar PDFs ya procesados
+    // Filtrar documentos ya procesados
     const { unprocessed, alreadyProcessed } = filterUnprocessed(pdfFiles);
     let filesToProcess = pdfFiles;
 
@@ -60,7 +80,7 @@ export async function run() {
         {
           type: 'list',
           name: 'action',
-          message: 'Algunos PDFs ya fueron procesados. ¿Qué deseas hacer?',
+          message: 'Algunos documentos ya fueron procesados. ¿Qué deseas hacer?',
           choices: [
             ...(unprocessed.length > 0
               ? [{ name: 'Procesar solo los nuevos', value: 'new' }]
@@ -87,22 +107,23 @@ export async function run() {
 
     ensureDirectory(OUTPUT_DIR);
 
-    // Paso 2: Extraer datos de cada PDF
+    // Paso 2: Extraer datos de cada documento
     logger.section('Paso 2: Extrayendo datos');
-    logger.processing(`Procesando ${filesToProcess.length} PDF(s)...`);
+    logger.processing(`Procesando ${filesToProcess.length} documento(s)...`);
 
     const perFileResults = await extractDataPerFile(filesToProcess);
 
-    // Paso 3: Guardar un CSV por PDF
-    logger.section('Paso 3: Guardando CSV por PDF');
+    // Paso 3: Guardar un CSV por documento
+    logger.section('Paso 3: Guardando CSV por documento');
 
     let totalItems = 0;
+    const usedNames = new Set();
 
     for (const { fileName, rows } of perFileResults) {
-      const csvName = path.basename(fileName, '.pdf') + '.csv';
+      const csvName = buildCSVName(fileName, usedNames);
       const csvPath = path.join(OUTPUT_DIR, csvName);
 
-      // Siempre sobreescribe el CSV del PDF (cada PDF es dueño de su CSV)
+      // Siempre sobreescribe el CSV del documento (cada documento es dueño de su CSV)
       await csvService.create(csvPath, COLUMNS);
 
       if (rows.length > 0) {

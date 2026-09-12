@@ -1,15 +1,19 @@
 import fetch from 'node-fetch';
 import * as cheerio from 'cheerio';
 import { logger } from '../utils/logger.js';
+import { fetchWordPressContent } from './wordpressService.js';
 
 // Patrones de URLs/texto que indican contenido relevante (blogs, noticias, prensa)
 const CONTENT_PATTERNS =
   /blog|news|noticias|prensa|press|articul|actualidad|novedades|insights|publicaciones|sala-de-prensa|comunicados|media|magazine/i;
 
-const MAX_SUBPAGES = 6;
+const MAX_SUBPAGES = 16;
 const FETCH_TIMEOUT_MS = 15000;
-const MAX_CONTENT_CHARS = 14000;
+const MAX_CONTENT_CHARS = 30000;
 const REQUEST_DELAY_MS = 1200;
+
+// Tope por página, para que una sola página muy larga no consuma el presupuesto
+const MAX_PAGE_CHARS = 6000;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,6 +114,34 @@ function discoverContentLinks($, baseUrl) {
 }
 
 /**
+ * Combina las páginas en un solo texto respetando el límite de caracteres.
+ * Se llenan por orden de prioridad: primero las páginas semilla (institucionales
+ * y las listadas en SOURCES), después las subpáginas descubiertas. Cada página
+ * entra completa hasta MAX_PAGE_CHARS; cuando se agota el presupuesto, se cortan
+ * las de menor prioridad, nunca las primeras.
+ * @param {Array<string>} seedPages - Contenido prioritario, en orden
+ * @param {Array<string>} extraPages - Contenido de las subpáginas descubiertas
+ * @returns {string} Contenido combinado
+ */
+function joinWithinBudget(seedPages, extraPages) {
+  const separator = '\n\n═══ SIGUIENTE PÁGINA ═══\n\n';
+  const parts = [];
+  let used = 0;
+
+  for (const page of [...seedPages, ...extraPages]) {
+    const capped = page.slice(0, MAX_PAGE_CHARS);
+    const cost = capped.length + (parts.length > 0 ? separator.length : 0);
+
+    if (used + cost > MAX_CONTENT_CHARS) break;
+
+    parts.push(capped);
+    used += cost;
+  }
+
+  return parts.join(separator);
+}
+
+/**
  * Extrae el nombre de dominio limpio de una URL
  * Ejemplo: https://www.izipay.pe/ → izipay.pe
  */
@@ -118,49 +150,90 @@ export function getDomain(url) {
 }
 
 /**
- * Scrapea un sitio web: página principal + subpáginas de contenido relevante
- * @param {string} url - URL del sitio a scrapear
- * @returns {Promise<{url, domain, pagesScraped, content}>}
+ * Scrapea un sitio web: las URLs indicadas + subpáginas de contenido relevante.
+ * Acepta varias URLs del mismo dominio (ej: home, /blog y /quienes-somos) y las
+ * devuelve como un único contenido, sin repetir páginas ya visitadas.
+ * @param {string|Array<string>} urlOrUrls - URL o URLs del sitio a scrapear
+ * @param {Object} [options]
+ * @param {Object} [options.wordpress] - {origin, prioritySlugs} para sitios SPA
+ *   cuyo HTML no trae texto y cuyo contenido vive en un WordPress headless
+ * @returns {Promise<{url, urls, domain, pagesScraped, content}>}
  */
-export async function scrapeWebsite(url) {
-  logger.debug(`Iniciando scraping de: ${url}`);
+export async function scrapeWebsite(urlOrUrls, { wordpress } = {}) {
+  const seedUrls = Array.isArray(urlOrUrls) ? urlOrUrls : [urlOrUrls];
+  logger.debug(`Iniciando scraping de: ${seedUrls.join(', ')}`);
 
-  // 1. Página principal
-  let mainHtml;
-  try {
-    mainHtml = await fetchHTML(url);
-  } catch (err) {
-    throw new Error(`No se pudo acceder a ${url}: ${err.message}`);
+  const visited = new Set();
+  const seedPages = [];
+  const discovered = [];
+  const errors = [];
+
+  // 1. Páginas indicadas explícitamente, en orden
+  for (const seedUrl of seedUrls) {
+    const normalized = seedUrl.split('#')[0];
+    if (visited.has(normalized)) continue;
+
+    if (visited.size > 0) await sleep(REQUEST_DELAY_MS);
+
+    try {
+      const html = await fetchHTML(normalized);
+      visited.add(normalized);
+
+      const $ = cheerio.load(html);
+      seedPages.push(parsePageContent($, normalized));
+
+      // Descubrir subpáginas de contenido desde cada semilla
+      for (const link of discoverContentLinks($, normalized)) {
+        if (!discovered.includes(link)) discovered.push(link);
+      }
+    } catch (err) {
+      errors.push(`${normalized}: ${err.message}`);
+      logger.debug(`  ✗ ${normalized}: ${err.message}`);
+    }
   }
 
-  const $ = cheerio.load(mainHtml);
-  const pages = [parsePageContent($, url)];
+  if (seedPages.length === 0 && !wordpress) {
+    throw new Error(`No se pudo acceder a ${getDomain(seedUrls[0])} → ${errors.join(' | ')}`);
+  }
 
-  // 2. Descubrir y scrapear subpáginas de contenido
-  const subLinks = discoverContentLinks($, url);
-  logger.debug(`${subLinks.length} enlace(s) de contenido descubiertos en ${getDomain(url)}`);
+  // 2. Scrapear las subpáginas descubiertas que no sean ya una semilla
+  const subLinks = discovered.filter((link) => !visited.has(link)).slice(0, MAX_SUBPAGES);
+  logger.debug(`${subLinks.length} enlace(s) de contenido descubiertos en ${getDomain(seedUrls[0])}`);
 
+  const extraPages = [];
   for (const link of subLinks) {
     await sleep(REQUEST_DELAY_MS);
     try {
       const html = await fetchHTML(link);
+      visited.add(link);
       const $sub = cheerio.load(html);
-      pages.push(parsePageContent($sub, link));
+      extraPages.push(parsePageContent($sub, link));
       logger.debug(`  ✓ ${link}`);
     } catch (err) {
       logger.debug(`  ✗ ${link}: ${err.message}`);
     }
   }
 
-  // 3. Combinar y truncar al límite de caracteres
-  const rawContent = pages.join('\n\n═══ SIGUIENTE PÁGINA ═══\n\n');
-  const content = rawContent.slice(0, MAX_CONTENT_CHARS);
+  // 3. Sitios SPA: el HTML no trae contenido, traerlo del WordPress headless.
+  // Va como semilla porque es la fuente principal de información del sitio.
+  let cmsPages = [];
+  if (wordpress?.origin) {
+    const { pages: blocks } = await fetchWordPressContent(wordpress.origin, {
+      prioritySlugs: wordpress.prioritySlugs || [],
+    });
+    cmsPages = blocks;
+  }
+
+  if (seedPages.length === 0 && cmsPages.length === 0) {
+    throw new Error(`Sin contenido para ${getDomain(seedUrls[0])} → ${errors.join(' | ')}`);
+  }
 
   return {
-    url,
-    domain: getDomain(url),
-    pagesScraped: pages.length,
-    content,
+    url: seedUrls[0],
+    urls: seedUrls,
+    domain: getDomain(seedUrls[0]),
+    pagesScraped: seedPages.length + cmsPages.length + extraPages.length,
+    content: joinWithinBudget([...cmsPages, ...seedPages], extraPages),
   };
 }
 

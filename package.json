@@ -10,7 +10,8 @@
     "scrape:web": "node scripts/scrape-web.js",
     "merge:csv": "node scripts/merge-csv.js",
     "sync:spreadsheet": "node scripts/sync-spreadsheet.js",
-    "update:vector": "node scripts/update-vector-store.js"
+    "update:vector": "node scripts/update-vector-store.js",
+    "history": "node scripts/history.js"
   },
   "author": "",
   "license": "ISC",
@@ -23,6 +24,7 @@
     "csv-parser": "^3.0.0",
     "csv-writer": "^1.6.0",
     "dotenv": "^16.3.1",
+    "exceljs": "^4.4.0",
     "glob": "^10.3.10",
     "googleapis": "^126.0.1",
     "inquirer": "^8.2.5",
