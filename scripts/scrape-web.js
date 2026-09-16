@@ -13,10 +13,10 @@
  *   npm run scrape:web -- --category financial # Solo la categoría indicada
  *
  * Variables de entorno requeridas:
- *   OPENAI_API_KEY  - API key de OpenAI
+ *   OPENROUTER_API_KEY u OPENAI_API_KEY, según LLM_PROVIDER
  *
  * Variables opcionales:
- *   OPENAI_MODEL    - Modelo a usar (default: gpt-4o-mini)
+ *   LLM_MODEL       - Modelo a usar (default: openai/gpt-4o-mini)
  *   OUTPUT_DIR      - Carpeta de salida (default: ./output)
  */
 
@@ -24,10 +24,12 @@ import dotenv from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 import chalk from 'chalk';
-import { scrapeWebsite, getDomain } from '../src/services/webScraperService.js';
-import { extractDataFromWeb, dedupeRows, COLUMNS } from '../src/services/webDataService.js';
-import * as csvService from '../src/services/csvService.js';
-import { logger } from '../src/utils/logger.js';
+import { scrapeWebsite, getDomain } from '../src/ingest/site/crawl.js';
+import { extractDataFromWeb, COLUMNS } from '../src/ingest/extractFromSite.js';
+import { dedupe } from '../src/milestone/index.js';
+import * as csvService from '../src/platform/csv.js';
+import { logger } from '../src/platform/log.js';
+import { llmConfig } from '../src/platform/llm.js';
 
 dotenv.config();
 
@@ -140,10 +142,15 @@ function groupByDomain(entries) {
 }
 
 async function main() {
-  console.log(chalk.blue.bold('\n🌐 Web Scraper Inteligente — LangChain + OpenAI\n'));
+  console.log(chalk.blue.bold('\n🌐 Web Scraper Inteligente — LangChain\n'));
 
-  if (!process.env.OPENAI_API_KEY) {
-    console.error(chalk.red('❌ OPENAI_API_KEY no está definida en el archivo .env'));
+  // Validar la key del proveedor activo, no la de OpenAI: la extracción puede
+  // correr sobre OpenRouter y exigir OPENAI_API_KEY bloquearía sin motivo.
+  let provider;
+  try {
+    provider = llmConfig();
+  } catch (err) {
+    console.error(chalk.red(`❌ ${err.message}`));
     process.exit(1);
   }
 
@@ -151,6 +158,7 @@ async function main() {
   const sites = groupByDomain(urls);
   const urlCount = sites.reduce((sum, site) => sum + site.urls.length, 0);
 
+  console.log(chalk.cyan(`Proveedor  : ${provider.name} · ${provider.model}`));
   console.log(chalk.cyan(`Categoría  : ${category}`));
   console.log(chalk.cyan(`Sitios     : ${sites.length} (${urlCount} URL(s))`));
   console.log(chalk.cyan(`Output     : ${OUTPUT_DIR}/\n`));
@@ -198,7 +206,7 @@ async function main() {
     );
 
     // 3. Segunda pasada de deduplicación sobre lo que se va a escribir
-    const { rows, duplicates } = dedupeRows(extracted);
+    const { milestones: rows, duplicates } = dedupe(extracted);
     if (duplicates > 0) {
       console.log(chalk.yellow(`│  ♻️  ${duplicates} duplicado(s) descartado(s)`));
     }

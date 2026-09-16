@@ -1,32 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import * as csvService from './csvService.js';
+import * as csvService from '../platform/csv.js';
+import { key as milestoneKey, changedFields } from '../milestone/index.js';
 import { config } from '../config.js';
 
 const HISTORY_DIR = config.paths.historyDir;
 const SNAPSHOTS_DIR = path.join(HISTORY_DIR, 'snapshots');
 const HISTORY_FILE = path.join(HISTORY_DIR, 'history.json');
-
-/**
- * Clave única de una fila: un mismo ítem se identifica por su documento
- * de origen más su título.
- * @param {Object} row - Fila del CSV
- * @returns {string}
- */
-function rowKey(row) {
-  return `${row.source_file || 'N/A'}::${row.title || 'N/A'}`;
-}
-
-/**
- * Campos que cambiaron entre dos versiones de la misma fila
- * @param {Object} before
- * @param {Object} after
- * @returns {Array<string>} Nombres de los campos distintos
- */
-function changedFields(before, after) {
-  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
-  return [...keys].filter((key) => (before[key] || '') !== (after[key] || ''));
-}
 
 /**
  * Compara dos conjuntos de filas y resume qué cambió
@@ -35,8 +15,8 @@ function changedFields(before, after) {
  * @returns {Object} Resumen de cambios
  */
 export function diffRows(previous, current) {
-  const prevMap = new Map(previous.map((row) => [rowKey(row), row]));
-  const currMap = new Map(current.map((row) => [rowKey(row), row]));
+  const prevMap = new Map(previous.map((row) => [milestoneKey(row), row]));
+  const currMap = new Map(current.map((row) => [milestoneKey(row), row]));
 
   const added = [];
   const removed = [];
@@ -113,13 +93,12 @@ export async function loadLastSnapshotRows() {
  * Registra una nueva versión: guarda el CSV como snapshot y anota en el
  * historial qué cambió respecto de la versión anterior.
  * @param {Object} params
- * @param {string} params.csvPath - CSV que se subió al vector store
- * @param {Array<string>} params.fileIds - IDs de los archivos en OpenAI
- * @param {string} params.fileName - Descripción de lo subido
- * @param {number} params.bytes - Tamaño del contenido subido
+ * @param {string} params.csvPath - CSV del que se toma el snapshot
+ * @param {string} [params.target] - Qué se publicó con esta versión
+ * @param {number} [params.bytes] - Tamaño del contenido publicado
  * @returns {Promise<Object>} Entrada creada
  */
-export async function recordVersion({ csvPath, fileIds, fileName, bytes }) {
+export async function recordVersion({ csvPath, target = 'corpus', bytes }) {
   fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
 
   const previousRows = await loadLastSnapshotRows();
@@ -133,8 +112,7 @@ export async function recordVersion({ csvPath, fileIds, fileName, bytes }) {
 
   const entry = {
     timestamp,
-    fileIds,
-    fileName,
+    target,
     bytes,
     rowCount: currentRows.length,
     previousRowCount: previousRows.length,

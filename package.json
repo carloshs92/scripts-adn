@@ -9,8 +9,8 @@
     "example": "node src/examples/programmatic-usage.js",
     "scrape:web": "node scripts/scrape-web.js",
     "merge:csv": "node scripts/merge-csv.js",
+    "publish:corpus": "node scripts/publish-corpus.js",
     "sync:spreadsheet": "node scripts/sync-spreadsheet.js",
-    "update:vector": "node scripts/update-vector-store.js",
     "history": "node scripts/history.js"
   },
   "author": "",

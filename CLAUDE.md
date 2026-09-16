@@ -2,12 +2,12 @@
 
 ## Propósito del proyecto
 
-Script Node.js que convierte PDFs a CSV usando LangChain + OpenAI, con soporte para sincronizar los CSVs generados a Google Drive como Google Sheets. Desarrollado para Intercorp ADN.
+Script Node.js que convierte PDFs, Excel y sitios web a CSV usando LangChain sobre OpenRouter, exporta el corpus que consume la app `intercorp-adn` y sincroniza los CSVs a Google Drive. Desarrollado para Intercorp ADN.
 
 ## Stack
 
 - **Runtime**: Node.js 16+ con ES Modules (`"type": "module"`)
-- **IA**: LangChain (`@langchain/openai`, `@langchain/community`) + OpenAI GPT
+- **IA**: LangChain (`@langchain/openai`, `@langchain/community`) sobre OpenRouter u OpenAI (intercambiables: OpenRouter expone un API compatible)
 - **PDFs**: `pdf-parse`
 - **CSV**: `csv-writer`, `csv-parser`
 - **Google Drive**: `googleapis` con Service Account
@@ -18,51 +18,62 @@ Script Node.js que convierte PDFs a CSV usando LangChain + OpenAI, con soporte p
 
 ```
 src/
-├── index.js              # Punto de entrada → corre cli/interactive.js
-├── config.js             # Configuración centralizada (modelos, rutas, límites)
-├── services/
-│   ├── pdfService.js     # Búsqueda de documentos y extracción de texto (PDF y Excel)
-│   ├── xlsxService.js    # Extracción de texto de archivos Excel (.xlsx/.xlsm/.xls)
-│   ├── dataService.js    # Extracción de datos con LangChain + OpenAI
-│   ├── csvService.js     # Creación y escritura de CSVs
-│   ├── webScraperService.js # Scraping de sitios web (agrupa URLs por dominio)
-│   ├── wordpressService.js  # Lectura de CMS headless vía REST + ACF (sitios SPA)
-│   ├── webDataService.js # Extracción de ítems desde contenido web + dedupe
-│   ├── driveService.js   # Upload de CSVs a Google Drive como Sheets
-│   └── historyService.js # Snapshots y diff entre versiones del vector store
-├── cli/
-│   └── interactive.js    # Flujo interactivo CLI con inquirer
-└── utils/
-    ├── logger.js         # Logging coloreado con chalk
-    ├── tracker.js        # Seguimiento de progreso
-    └── validator.js      # Validación de rutas y config
-scripts/
-├── sync-spreadsheet.js   # Sube output/*.csv a Google Drive
-├── update-vector-store.js # Actualiza el vector store de OpenAI + registra la versión
-├── history.js            # Muestra el historial de versiones del vector store
-└── test-setup.js         # Verifica instalación
+├── index.js              # Punto de entrada → cli/interactive.js
+├── config.js             # Parámetros ajustables (modelos, rutas, límites)
+│
+├── milestone/            # EL DOMINIO — qué es un hito. No depende de nada externo.
+│   ├── schema.js         #   FIELDS, CATEGORIES, MISSING, coerce(), PROMPT_SCHEMA
+│   ├── identity.js       #   key() entre versiones · titleKey() dentro de una extracción
+│   ├── dedupe.js         #   descarte de repetidos, gana mayor score
+│   └── index.js          #   barrel del dominio
+│
+├── ingest/               # CASOS DE USO — de una fuente salen hitos
+│   ├── extractFromDocuments.js  # prompt de documentos + chain
+│   ├── extractFromSite.js       # prompt web + chain + dedupe
+│   ├── fromModelResponse.js     # respuesta del modelo → hitos (4 compuertas)
+│   ├── processed.js             # registro de documentos ya procesados
+│   ├── document/
+│   │   ├── index.js      #     búsqueda y lectura de documentos
+│   │   └── spreadsheet.js#     lectura de Excel con exceljs
+│   └── site/
+│       ├── crawl.js      #     scraping HTML + presupuesto de contenido
+│       └── wordpress.js  #     CMS headless vía REST + ACF
+│
+├── corpus/               # CASOS DE USO — el corpus se consolida, publica y versiona
+│   ├── consolidate.js    #   CSVs por documento → merged.csv
+│   ├── publishToApp.js   #   merged.csv → milestones.md + versión
+│   ├── publishToDrive.js #   CSVs → Google Drive
+│   ├── publish.js        #   consolidar + publicar + VERIFICAR el índice
+│   ├── version.js        #   snapshots y diff entre versiones
+│   └── markdown.js       #   serialización del hito a Markdown
+│
+├── platform/             # REEMPLAZABLE — nombrado por la herramienta, a propósito
+│   ├── llm.js  csv.js  drive.js  log.js  paths.js
+│
+└── cli/interactive.js    # Flujo interactivo con inquirer
 ```
 
 ## Comandos disponibles
 
 ```bash
 npm start              # CLI interactivo: convierte PDFs y Excel → un CSV por documento en output/
-npm run merge:csv      # Combina todos los CSVs de output/ en output/merged.csv
+npm run merge:csv      # Consolida los CSVs de output/ en output/merged.csv
+npm run publish:corpus # Consolida + publica milestones.md en la app + VERIFICA su índice
 npm test               # Verifica que la instalación esté correcta
 npm run example        # Ejemplo de uso programático
 npm run sync:spreadsheet  # Sube todos los CSVs de output/ a Google Drive (en proceso)
-npm run update:vector  # Sube output/merged.csv (como Markdown) al vector store de OpenAI
-npm run history        # Muestra el historial de versiones del vector store (--detail, --last)
+npm run history        # Muestra el historial de versiones del corpus (--detail, --last)
 ```
 
 ## Variables de entorno requeridas
 
 ```
-OPENAI_API_KEY             # Requerida para la conversión PDF → CSV
-OPENAI_MODEL               # Opcional, default: gpt-4o-mini
+OPENROUTER_API_KEY         # Requerida (LLM_PROVIDER=openrouter, el default)
+OPENAI_API_KEY             # Solo si se vuelve a LLM_PROVIDER=openai
+LLM_PROVIDER               # Opcional: openrouter | openai. Sin definir usa openrouter si hay key suya
+LLM_MODEL                  # Opcional, default: openai/gpt-4o-mini (OpenRouter) o gpt-4o-mini (OpenAI)
 GOOGLE_SERVICE_ACCOUNT_KEY # Ruta al JSON de service account (para sync)
 GOOGLE_DRIVE_FOLDER_ID     # ID de la carpeta destino en Drive (para sync)
-VECTOR_STORE_ID            # ID del vector store de OpenAI (para update:vector)
 OUTPUT_DIR                 # Opcional, default: ./output
 MERGED_NAME                # Opcional, default: merged.csv
 ```
@@ -76,6 +87,9 @@ MERGED_NAME                # Opcional, default: merged.csv
 - El modelo por defecto es `gpt-4o-mini` para optimizar costos
 - Campos sin información se marcan como `N/A`
 - El `config.js` es la fuente de verdad para parámetros ajustables
+- `src/milestone/` es la fuente de verdad de las reglas del hito y **no importa nada de fuera de sí mismo**
+- Las dependencias apuntan hacia adentro: `platform/` ← `ingest/` y `corpus/` ← `milestone/`
+- Un script de `scripts/` solo parsea argumentos y formatea salida; la lógica vive en un caso de uso
 
 ## Flujo principal (PDF/Excel → CSV individual por documento)
 
@@ -86,10 +100,35 @@ MERGED_NAME                # Opcional, default: merged.csv
 5. Cada fila incluye `source_file` con el nombre del documento de origen
 6. Los documentos procesados quedan registrados en `.pdf-registry.json`
 
-**Columnas fijas** (definidas en `dataService.COLUMNS`):
+**Columnas fijas** (definidas en `src/milestone/schema.js` → `FIELDS`):
 `title`, `shortDescription`, `category`, `largeDescription`, `company`, `year`, `score`, `source_file`
 
-**Categorías válidas**: `sustainability`, `talent`, `innovation`, `security`
+**Categorías válidas** (`CATEGORIES`): `sustainability`, `talent`, `innovation`, `security`
+
+## El modelo de dominio: `src/milestone/`
+
+El hito es la entidad central. **Todas sus reglas viven en `src/milestone/` y en ningún otro
+lugar.** Antes estaban repartidas: el esquema y las categorías en `dataService`, la coerción
+duplicada entre `dataService` y `webDataService`, la identidad en `historyService` y la clave de
+deduplicación en `webDataService` — seis piezas del mismo concepto en cuatro archivos, con 38
+líneas de código idénticas entre los dos extractores.
+
+| Qué | Dónde |
+|---|---|
+| Campos, categorías y sus fallbacks | `schema.js` → `FIELDS`, `CATEGORIES`, `MISSING` |
+| Coerción de la respuesta del modelo | `schema.js` → `coerce(item, sourceFile)` |
+| Esquema expresado para el prompt | `schema.js` → `PROMPT_SCHEMA` (llaves dobladas para LangChain) |
+| Identidad entre versiones del corpus | `identity.js` → `key()` = `source_file::title` |
+| Identidad dentro de una extracción | `identity.js` → `titleKey()` (sin tildes ni puntuación) |
+| Descarte de repetidos | `dedupe.js` → `dedupe()`, gana mayor `score` |
+| Parseo de la respuesta del modelo | `fromModelResponse.js` → 4 compuertas que degradan a `[]` |
+
+**Reglas al tocar esto:**
+- Agregar una columna se hace en `FIELDS` y en `coerce()`, nada más; `PROMPT_SCHEMA` la declara
+  para el modelo y `markdownService` la serializa sola.
+- `source_file` nunca viene del modelo: lo impone quien conoce el origen.
+- Ningún servicio debe volver a escribir `'N/A'` a mano: usar `MISSING` y `hasValue()`.
+- `dataService` y `webDataService` solo deben contener su prompt y la invocación de la chain.
 
 ## Flujo de merge (CSVs individuales → merged.csv)
 
@@ -120,28 +159,39 @@ MERGED_NAME                # Opcional, default: merged.csv
 **Ejemplo real**: `sip.pe` es una SPA cuyas 3 URLs devuelven el mismo shell vacío;
 su contenido vive en `cms.sip.pe`.
 
-## Flujo de actualización del vector store (merged.csv → OpenAI)
+## Proveedor de LLM (OpenRouter u OpenAI)
 
-1. `update-vector-store.js` convierte `output/merged.csv` a Markdown, **un archivo por
-   `source_file`** (`## <title>` por fila). Dos razones:
-   - **El `file_search` de OpenAI no acepta `.csv`**, así que convertir es obligatorio
-   - Con un único `.md` grande, cada chunk mezclaba ítems de empresas distintas (el chunk
-     con "Qué es Sip" empezaba con un ítem de UTP) y su embedding dejaba de representar a
-     ninguna. Un archivo por fuente mantiene cada chunk dentro de un mismo contexto
-2. Sube los `.md` (a un temporal del sistema, no a `output/`) y los asocia con
-   `fileBatches` usando chunking `static` de 400 tokens / 100 de solape
-3. **Recién cuando el lote está `completed`** elimina los archivos anteriores, para que el
-   store nunca quede vacío si algo falla
-4. `historyService.recordVersion()` guarda un snapshot del CSV en `history/snapshots/` y anota en
-   `history/history.json` qué cambió respecto de la versión anterior, junto con los `fileIds` subidos
-5. `npm run history` muestra esa línea de tiempo
+`llmService.createChatModel()` es el único punto que instancia el modelo; `dataService` y
+`webDataService` lo usan. OpenRouter expone un API compatible con el de OpenAI, así que solo
+cambian `baseURL` y la key — prompts, parseo de JSON y LangChain quedan igual.
 
-El diff identifica cada ítem por `source_file` + `title`, y para los modificados registra qué campos
-cambiaron. `history/` está ignorado por git.
+Verificado: `openai/gpt-4o-mini` por OpenRouter consume los mismos tokens y da la misma calidad
+que el directo, al mismo precio ($0.15/$0.60 por 1M).
 
-**Cuidado con el listado de archivos del store**: `vectorStores.files.list()` devuelve menos
-archivos de los que reporta `file_counts` (verificado: 24 de 31). Por eso los archivos a eliminar
-salen de los `fileIds` guardados en el historial, unidos a lo que devuelva el listado.
+**Cuidado con los modelos de razonamiento**: `gpt-5-nano` parece 3x más barato por token, pero
+genera ~8x más tokens de salida y termina costando más. Y los modelos chicos no-OpenAI
+(`mistral-nemo`) rompen el JSON que el pipeline necesita.
+
+**El vector store se dio de baja.** OpenRouter no tiene `/vector_stores` (404), pero tampoco hacía
+falta: la app dejó de consultarlo al pasar a la búsqueda rápida con índice local. Con él se retiró
+`update-vector-store.js`, y el histórico —que colgaba de esa subida— pasó a `export:corpus`.
+
+## Publicar el corpus (merged.csv → la app)
+
+`npm run publish:corpus` encadena tres cosas que antes eran tres comandos sueltos:
+
+1. `corpus/consolidate.js` — combina los `output/*.csv` en `merged.csv`. Ordena los archivos
+   alfabéticamente para que el corpus sea reproducible entre máquinas (antes el orden lo daba
+   el filesystem vía `glob`)
+2. `corpus/publishToApp.js` — escribe `../intercorp-adn/data/milestones.md` y registra la versión
+3. `corpus/publish.js` — **verifica** que el índice commiteado de la app cubra exactamente los
+   hitos publicados, comparando identidades con `milestone.key()`, no cantidades
+
+**Por qué existe el paso 3.** Su ausencia costó dos semanas de datos viejos: el índice quedó en
+609 hitos mientras el CSV tenía 620, sin una excepción ni una línea de log. Un conteo no alcanza
+—dos corpus pueden tener 620 filas y no ser el mismo— así que se comparan identidades. Cuando
+detecta desfase imprime los hitos que faltan o sobran y el comando exacto para regenerar el
+índice; no puede hacerlo solo porque `build-graph.mjs` vive en el otro repositorio.
 
 ## Flujo de sincronización (CSV → Google Drive)
 

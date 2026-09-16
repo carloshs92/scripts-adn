@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { logger } from '../utils/logger.js';
+import { logger } from '../../platform/log.js';
 
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_PAGES = 30;

@@ -3,8 +3,8 @@
 /**
  * history.js
  *
- * Muestra el historial de actualizaciones del vector store: cuándo se
- * actualizó, cuántos ítems tenía y qué cambió respecto de la versión anterior.
+ * Muestra el historial de versiones del corpus: cuándo se publicó, cuántos
+ * ítems tenía y qué cambió respecto de la versión anterior.
  *
  * Uso:
  *   npm run history                 # Resumen de todas las versiones
@@ -13,7 +13,7 @@
  */
 
 import chalk from 'chalk';
-import { loadHistory } from '../src/services/historyService.js';
+import { loadHistory } from '../src/corpus/version.js';
 
 const args = process.argv.slice(2);
 const showDetail = args.includes('--detail') || args.includes('--last');
@@ -55,11 +55,11 @@ function printDetail(changes) {
 function main() {
   const entries = loadHistory();
 
-  console.log(chalk.blue.bold('\n📜 Historial del vector store\n'));
+  console.log(chalk.blue.bold('\n📜 Historial del corpus\n'));
 
   if (entries.length === 0) {
     console.log(chalk.yellow('   Todavía no hay versiones registradas.'));
-    console.log(chalk.gray('   Ejecuta: npm run update:vector\n'));
+    console.log(chalk.gray('   Ejecuta: npm run export:corpus\n'));
     return;
   }
 
@@ -70,8 +70,7 @@ function main() {
     const { added, removed, modified, unchanged, sources } = entry.changes;
 
     console.log(chalk.blue(`v${version} — ${formatDate(entry.timestamp)}`));
-    const fileIds = entry.fileIds || (entry.fileId ? [entry.fileId] : []);
-    console.log(chalk.gray(`   Archivo  : ${entry.fileName} (${fileIds.length} en OpenAI)`));
+    console.log(chalk.gray(`   Publicado: ${entry.target ?? entry.fileName ?? 'corpus'}`));
     console.log(chalk.gray(`   Ítems    : ${entry.rowCount}` +
       (entry.previousRowCount > 0 ? ` (antes ${entry.previousRowCount})` : ' — primera versión')));
     console.log(chalk.gray(`   Fuentes  : ${sources.total}`));

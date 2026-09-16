@@ -6,10 +6,10 @@
  * con otros scripts o procesos.
  */
 
-import * as pdfService from '../services/pdfService.js';
-import * as dataService from '../services/dataService.js';
-import * as csvService from '../services/csvService.js';
-import { logger } from '../utils/logger.js';
+import * as pdfService from '../ingest/document/index.js';
+import * as dataService from '../ingest/extractFromDocuments.js';
+import * as csvService from '../platform/csv.js';
+import { logger } from '../platform/log.js';
 import * as fs from 'fs';
 import * as path from 'path';
 

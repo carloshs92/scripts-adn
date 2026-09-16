@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import fs from 'fs';
 import path from 'path';
 import http from 'http';
-import { logger } from '../utils/logger.js';
+import { logger } from './log.js';
 import open from 'open';
 
 const MIME_CSV = 'text/csv';

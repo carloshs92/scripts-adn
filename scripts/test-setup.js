@@ -17,10 +17,11 @@ async function verificarInstalacion() {
   const archivos = [
     { archivo: 'src/index.js', descripcion: 'Script principal' },
     { archivo: 'src/config.js', descripcion: 'Configuración' },
-    { archivo: 'src/services/pdfService.js', descripcion: 'Servicio de PDF' },
-    { archivo: 'src/services/xlsxService.js', descripcion: 'Servicio de Excel' },
-    { archivo: 'src/services/dataService.js', descripcion: 'Servicio de datos' },
-    { archivo: 'src/services/csvService.js', descripcion: 'Servicio de CSV' },
+    { archivo: 'src/milestone/schema.js', descripcion: 'Dominio: el hito' },
+    { archivo: 'src/ingest/extractFromDocuments.js', descripcion: 'Ingesta de documentos' },
+    { archivo: 'src/ingest/extractFromSite.js', descripcion: 'Ingesta de sitios' },
+    { archivo: 'src/corpus/publish.js', descripcion: 'Publicación del corpus' },
+    { archivo: 'src/platform/csv.js', descripcion: 'Plataforma: CSV' },
     { archivo: 'src/cli/interactive.js', descripcion: 'CLI interactiva' },
     { archivo: 'package.json', descripcion: 'Dependencias' },
   ];
@@ -53,10 +54,17 @@ async function verificarInstalacion() {
   if (envExiste) {
     console.log('  ✅ Archivo .env encontrado');
     const envContent = fs.readFileSync('.env', 'utf-8');
-    if (envContent.includes('sk-proj-') || envContent.includes('sk-')) {
-      console.log('  ✅ OPENAI_API_KEY configurada');
-    } else if (!envContent.includes('sk-your-api-key')) {
-      console.log('  ⚠️  OPENAI_API_KEY no configurada o vacía');
+    const tieneKey = (nombre) => new RegExp(`^${nombre}=\\s*\\S+`, 'm').test(envContent);
+
+    // La extracción corre sobre el proveedor que indique LLM_PROVIDER
+    if (tieneKey('OPENROUTER_API_KEY')) {
+      console.log('  ✅ OPENROUTER_API_KEY configurada');
+    }
+    if (tieneKey('OPENAI_API_KEY')) {
+      console.log('  ✅ OPENAI_API_KEY configurada (alternativa)');
+    }
+    if (!tieneKey('OPENROUTER_API_KEY') && !tieneKey('OPENAI_API_KEY')) {
+      console.log('  ⚠️  Sin key de LLM: define OPENROUTER_API_KEY u OPENAI_API_KEY');
       console.log('     Edita .env y añade tu API key');
     }
   } else {

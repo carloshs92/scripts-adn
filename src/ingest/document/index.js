@@ -2,9 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 import { glob } from 'glob';
-import { logger } from '../utils/logger.js';
-import { config } from '../config.js';
-import { extractTextFromXLSX } from './xlsxService.js';
+import { logger } from '../../platform/log.js';
+import { config } from '../../config.js';
+import { extractTextFromXLSX } from './spreadsheet.js';
 
 const EXCEL_EXTENSIONS = ['.xlsx', '.xlsm', '.xls'];
 

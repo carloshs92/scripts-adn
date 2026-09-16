@@ -29,21 +29,6 @@ export function validatePDFPath(pdfPath) {
 }
 
 /**
- * Valida que la API key de OpenAI esté configurada
- */
-export function validateOpenAIKey(apiKey) {
-  if (!apiKey) {
-    throw new Error('OPENAI_API_KEY no está definida en el archivo .env');
-  }
-
-  if (!apiKey.startsWith('sk-')) {
-    throw new Error('OPENAI_API_KEY inválida. Debe comenzar con "sk-"');
-  }
-
-  return true;
-}
-
-/**
  * Crea el directorio si no existe
  */
 export function ensureDirectory(dirPath) {
@@ -56,6 +41,5 @@ export function ensureDirectory(dirPath) {
 export default {
   validateCSVPath,
   validatePDFPath,
-  validateOpenAIKey,
   ensureDirectory,
 };
