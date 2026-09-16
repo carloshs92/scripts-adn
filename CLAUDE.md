@@ -59,7 +59,9 @@ src/
 npm start              # CLI interactivo: convierte PDFs y Excel → un CSV por documento en output/
 npm run merge:csv      # Consolida los CSVs de output/ en output/merged.csv
 npm run publish:corpus # Consolida + publica milestones.md en la app + VERIFICA su índice
-npm test               # Verifica que la instalación esté correcta
+npm test               # Pruebas con vitest (dominio + contrato del corpus)
+npm run test:watch     # Las mismas, en modo watch
+npm run check:setup    # Verifica que la instalación esté correcta
 npm run example        # Ejemplo de uso programático
 npm run sync:spreadsheet  # Sube todos los CSVs de output/ a Google Drive (en proceso)
 npm run history        # Muestra el historial de versiones del corpus (--detail, --last)
@@ -77,6 +79,28 @@ GOOGLE_DRIVE_FOLDER_ID     # ID de la carpeta destino en Drive (para sync)
 OUTPUT_DIR                 # Opcional, default: ./output
 MERGED_NAME                # Opcional, default: merged.csv
 ```
+
+## Pruebas
+
+```
+tests/milestone.test.js        El dominio: coerce, key, titleKey, dedupe, PROMPT_SCHEMA
+tests/corpus-contract.test.js  El contrato entre repos, ida y vuelta
+```
+
+`corpus-contract` es la que más importa: **no hay API ni base compartida entre los dos
+proyectos**, el acoplamiento es un Markdown que este repo escribe y `build-graph.mjs` del vecino
+parsea. La prueba lleva una copia literal de ese `parseMarkdown()` y verifica el viaje completo —
+si la gramática cambia de un lado, el otro no falla, descarta registros en silencio.
+
+Cubre las dos regresiones que ya ocurrieron: el doble espacio en `source_file` que daba identidades
+distintas a cada lado, y los saltos de línea dentro de un valor que parten un registro. Esa segunda
+defensa vive en dos sitios a propósito —`coerce()` y el serializador— porque `consolidate()` lee las
+filas del CSV sin pasar por el dominio.
+
+**Al agregar una prueba, verificá que falle.** Las primeras versiones de estas pasaban con el
+código roto: los asserts leían la misma constante que pretendían verificar. La forma de comprobarlo
+es mutar el código a mano (anular una constante, quitar un `replace`) y confirmar que la suite se
+pone roja.
 
 ## Convenciones de código
 

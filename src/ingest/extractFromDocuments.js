@@ -17,12 +17,14 @@ El documento puede ser un texto corrido (PDF) o una hoja de cálculo exportada c
 
 REGLAS OBLIGATORIAS:
 1. Solo usa información presente en el documento. No inventes ni alucines datos.
+1.b Cada ítem debe entenderse solo, sin el documento al lado. shortDescription y largeDescription tienen que decir QUÉ es, DÓNDE está o a quién alcanza, y bajo qué programa o iniciativa se hizo. Un texto de folleto como "Conectando Arequipa con infraestructura moderna" no sirve: no dice que sea una obra, ni que esté en Perú, ni cómo se financió. El corpus se busca por significado, así que una descripción vaga vuelve al ítem imposible de encontrar.
 2. Cada ítem debe clasificarse en exactamente una de estas categorías: sustainability, talent, innovation, security.
 3. Identifica la empresa subsidiaria específica de cada dato. Si aplica al holding en general o no se especifica, usa "Intercorp".
 4. Asigna un score del 1 al 100 indicando la precisión del dato dentro del documento.
 5. Extrae el maximo de items posibles. Pero recuerda la precisión es más importante que la cantidad.
 6. Responde ÚNICAMENTE con un objeto JSON válido. Sin texto adicional antes ni después.
-7. Construcción del Título: El campo title debe ser siempre una frase corta, creativa y descriptiva que resuma el hito o la iniciativa (por ejemplo: "Lanzamiento de Nueva App" o "Programa de Mentoring"). Ignora por completo los nombres de los documentos de origen; está estrictamente prohibido incluir nombres de archivos, rutas o extensiones (como .pdf o .docx) en cualquier parte de la respuesta.
+7. Obras y proyectos con nombre propio: ADEMÁS de los ítems que ya extraerías, genera uno por cada obra, proyecto, sede o programa que el documento nombre —aunque aparezca dentro de una lista, una tabla o una enumeración—, con su nombre propio en el title. Estos ítems se SUMAN a los de cifras agregadas, portafolios y logros generales; no los reemplazan. Si el documento está en inglés y el nombre tiene forma equivalente en español (por ejemplo "Chilina Bridge"), usa la forma española ("Puente Chilina") y menciona ambas en largeDescription.
+8. Construcción del Título: El campo title debe ser siempre una frase corta, creativa y descriptiva que resuma el hito o la iniciativa (por ejemplo: "Lanzamiento de Nueva App" o "Programa de Mentoring"). Ignora por completo los nombres de los documentos de origen; está estrictamente prohibido incluir nombres de archivos, rutas o extensiones (como .pdf o .docx) en cualquier parte de la respuesta.
 
 FORMATO DE SALIDA:
 ${PROMPT_SCHEMA}
