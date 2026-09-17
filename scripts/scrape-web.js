@@ -38,6 +38,12 @@ const OUTPUT_DIR = process.env.OUTPUT_DIR || './output';
 // ─── Configuración de fuentes por categoría ─────────────────────────────────
 // Cada categoría agrupa sitios relacionados. Agrega nuevas categorías aquí.
 const SOURCES = {
+  // El sitio del holding: es la única vía institucional para las empresas que
+  // bloquean el scraping. interbank.pe devuelve 403 en todas sus rutas, así que
+  // su descripción solo puede venir de acá o de los reportes corporativos.
+  holding: [
+    'https://www.intercorp.com.pe/',
+  ],
   financial: [
     'https://www.izipay.pe/',
     'https://interfondos.com.pe/home',
@@ -48,12 +54,14 @@ const SOURCES = {
   ],
   retail: [
     'https://www.inretail.pe/',
-  // 'https://www.plazavea.com.pe/',
-  // 'https://www.makro.pe/',
-  // 'https://www.tiendasmass.com.pe/',
-  // 'https://www.vivanda.com.pe/',
-  // 'https://www.realplaza.com/',
-  // 'https://www.oechsle.pe/',
+    'https://www.plazavea.com.pe/',
+    'https://www.makro.pe/',
+    'https://www.tiendasmass.com.pe/',
+    'https://www.vivanda.com.pe/',
+    'https://www.realplaza.com/',
+    'https://www.oechsle.pe/',
+    'https://www.promart.pe/',
+    'https://www.supermercadosperuanos.com.pe/',
     'https://app.agora.pe/',
     // sip.pe es una SPA de Angular: su HTML no trae texto (las 3 URLs devuelven
     // el mismo shell vacío). El contenido real vive en su WordPress headless,
@@ -68,7 +76,14 @@ const SOURCES = {
   ],
   health: [
     'https://www.aviva.pe/',
-    'https://web.quimicasuiza.com/'
+    'https://web.quimicasuiza.com/',
+    'https://www.inkafarma.pe/',
+    'https://www.mifarma.com.pe/'
+  ],
+  entertainment: [
+    'https://www.cineplanet.com.pe/',
+    'https://www.casa-andina.com/',
+    'https://www.latinka.com.pe/'
   ],
   education: [
     'https://www.innovaschools.edu.pe/',
