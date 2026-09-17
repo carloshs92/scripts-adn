@@ -26,7 +26,7 @@ import path from 'path';
 import chalk from 'chalk';
 import { scrapeWebsite, getDomain } from '../src/ingest/site/crawl.js';
 import { extractDataFromWeb, COLUMNS } from '../src/ingest/extractFromSite.js';
-import { dedupe, titleKey } from '../src/milestone/index.js';
+import { dedupe, mergeRuns } from '../src/milestone/index.js';
 import * as csvService from '../src/platform/csv.js';
 import { logger } from '../src/platform/log.js';
 import { llmConfig } from '../src/platform/llm.js';
@@ -160,40 +160,6 @@ function groupByDomain(entries) {
   return [...groups.values()];
 }
 
-/**
- * Une lo recién extraído con lo que ya estaba en el CSV del dominio.
- *
- * Los nuevos van primero: ante títulos equivalentes `dedupe` conserva el de
- * mayor score, y los recién extraídos traen las reglas de prompt vigentes.
- * Después se descartan los casi-duplicados —títulos cuyas palabras
- * significativas están contenidas en las de otro, como "Museo Sipán" dentro de
- * "Museo de Sipán Renovado"— que `dedupe` no detecta por comparar el título
- * completo.
- *
- * @param {Array<Object>} nuevos
- * @param {Array<Object>} previos
- * @returns {Array<Object>}
- */
-function fusionar(nuevos, previos) {
-  const significativas = (titulo) =>
-    new Set(titleKey(titulo).split(' ').filter((w) => w.length > 4));
-
-  const contenido = (a, b) => {
-    const [x, y] = [significativas(a), significativas(b)];
-    const chico = x.size < y.size ? x : y;
-    const grande = x.size < y.size ? y : x;
-    return chico.size > 0 && [...chico].every((w) => grande.has(w));
-  };
-
-  const { milestones } = dedupe([...nuevos, ...previos]);
-  const conservados = [];
-  for (const hito of milestones) {
-    if (conservados.some((c) => contenido(c.title, hito.title))) continue;
-    conservados.push(hito);
-  }
-  return conservados;
-}
-
 async function main() {
   console.log(chalk.blue.bold('\n🌐 Web Scraper Inteligente — LangChain\n'));
 
@@ -278,7 +244,7 @@ async function main() {
     // sobreescritura, cada re-scrapeo perdía lo que esa corrida no vio —SIP
     // cayó de 15 hitos a 4— así que lo nuevo se suma a lo anterior.
     const previos = await csvService.read(csvPath).catch(() => []);
-    const fusionados = fusionar(rows, previos);
+    const fusionados = mergeRuns(rows, previos);
     const sumados = fusionados.length - previos.length;
 
     await csvService.create(csvPath, COLUMNS);

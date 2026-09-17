@@ -2,6 +2,7 @@ import inquirer from 'inquirer';
 import * as path from 'path';
 import { findPDFs } from '../ingest/document/index.js';
 import { extractDataPerFile, COLUMNS } from '../ingest/extractFromDocuments.js';
+import { mergeRuns } from '../milestone/index.js';
 import * as csvService from '../platform/csv.js';
 import { logger } from '../platform/log.js';
 import { validatePDFPath, ensureDirectory } from '../platform/paths.js';
@@ -43,7 +44,7 @@ function buildCSVName(fileName, usedNames) {
   return csvName;
 }
 
-export async function run({ pdfArg } = {}) {
+export async function run({ pdfArg, force = false } = {}) {
   logger.header('📄 PDF / Excel to CSV Converter con LangChain');
 
   try {
@@ -65,7 +66,11 @@ export async function run({ pdfArg } = {}) {
     const { unprocessed, alreadyProcessed } = filterUnprocessed(pdfFiles);
     let filesToProcess = pdfFiles;
 
-    if (alreadyProcessed.length > 0) {
+    if (force && alreadyProcessed.length > 0) {
+      // Reprocesar sin preguntar: es la vía para regenerar un documento cuando
+      // cambian las reglas del prompt, sin editar el registro a mano.
+      logger.info(`--force: se reprocesan los ${pdfFiles.length} documento(s)`);
+    } else if (alreadyProcessed.length > 0) {
       logger.info(
         `${alreadyProcessed.length} archivo(s) ya procesado(s): ${alreadyProcessed.map((f) => path.basename(f)).join(', ')}`
       );
@@ -123,17 +128,25 @@ export async function run({ pdfArg } = {}) {
       const csvName = buildCSVName(fileName, usedNames);
       const csvPath = path.join(OUTPUT_DIR, csvName);
 
-      // Siempre sobreescribe el CSV del documento (cada documento es dueño de su CSV)
+      // Se fusiona con lo que ya había en vez de reemplazarlo: la extracción no
+      // es determinista y cada corrida ve cosas distintas del mismo documento.
+      const previos = await csvService.read(csvPath).catch(() => []);
+      const fusionados = mergeRuns(rows, previos);
+
       await csvService.create(csvPath, COLUMNS);
 
-      if (rows.length > 0) {
-        await csvService.addRows(csvPath, rows, COLUMNS);
-        logger.success(`${csvName} → ${rows.length} ítem(s) guardados`);
+      if (fusionados.length > 0) {
+        await csvService.addRows(csvPath, fusionados, COLUMNS);
+        const sumados = fusionados.length - previos.length;
+        logger.success(
+          `${csvName} → ${fusionados.length} hito(s)` +
+            (previos.length ? ` (${previos.length} previos, ${sumados >= 0 ? '+' : ''}${sumados})` : '')
+        );
       } else {
         logger.warn(`${csvName} → sin datos extraídos`);
       }
 
-      totalItems += rows.length;
+      totalItems += fusionados.length;
     }
 
     markProcessed(filesToProcess);

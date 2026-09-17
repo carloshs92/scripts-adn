@@ -21,4 +21,4 @@ export {
   hasValue,
 } from './schema.js';
 export { key, titleKey, changedFields } from './identity.js';
-export { dedupe } from './dedupe.js';
+export { dedupe, mergeRuns } from './dedupe.js';
