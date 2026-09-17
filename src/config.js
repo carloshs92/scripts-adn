@@ -21,6 +21,25 @@ export const config = {
     maxRetries: 3,
   },
 
+  // Troceado de documentos para la extracción
+  chunking: {
+    // Caracteres por llamada al modelo. Un reporte de sostenibilidad puede
+    // tener 400.000 caracteres: mandarlo entero entra en el contexto pero el
+    // modelo resume en vez de extraer, y la densidad se desploma de 147 hitos
+    // por cada 10.000 caracteres a 1,6. Se trocea para que cada llamada vea
+    // una porción que pueda agotar.
+    maxCharactersPerCall: 15000,
+
+    // Solape entre trozos, para no partir un hito por la mitad
+    overlapCharacters: 600,
+
+    // Trozos en vuelo a la vez. En serie, 105 llamadas tardaron 34 minutos.
+    // El límite no existe por miedo al rate limit —un 429 se reintenta, no
+    // pierde nada— sino para no encolar cien peticiones que el proveedor va a
+    // rechazar igual, y para que el progreso avance de forma legible.
+    concurrency: 5,
+  },
+
   // Configuración de procesamiento de PDFs
   pdf: {
     // Máximo número de caracteres a usar para definir columnas
@@ -34,7 +53,9 @@ export const config = {
   xlsx: {
     // Máximo número de caracteres a enviar al modelo por archivo Excel
     // (las hojas grandes se truncan para no desbordar el contexto)
-    maxCharactersForExtraction: 60000,
+    // Sin tope: el troceado de `chunking` se encarga de que cada llamada vea
+    // una porción manejable, así que ya no hace falta descartar hojas enteras.
+    maxCharactersForExtraction: Number.MAX_SAFE_INTEGER,
   },
 
   // Configuración de CSV

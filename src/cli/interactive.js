@@ -10,18 +10,50 @@ import { filterUnprocessed, markProcessed } from '../ingest/processed.js';
 
 const OUTPUT_DIR = './output';
 
+/** Patrón por defecto, el mismo que ofrece el prompt interactivo. */
+const DEFAULT_PATTERN = './pdfs/*.{pdf,xlsx,xlsm,xls}';
+
 async function askForPDFPath() {
   const answer = await inquirer.prompt([
     {
       type: 'input',
       name: 'pdfPath',
       message: 'Ingresa la ruta de los documentos (ej: ./pdfs/*.pdf, ./pdfs/*.xlsx o ./pdfs/archivo.xlsx):',
-      default: './pdfs/*.{pdf,xlsx,xlsm,xls}',
+      default: DEFAULT_PATTERN,
     },
   ]);
 
   validatePDFPath(answer.pdfPath);
   return answer.pdfPath;
+}
+
+/**
+ * Dibuja una barra de progreso que se reescribe sobre sí misma.
+ *
+ * El troceado convirtió una llamada por documento en decenas, así que una
+ * corrida completa tarda minutos. Sin esto la consola queda muda y no hay modo
+ * de distinguir un proceso trabajando de uno colgado.
+ *
+ * @param {Object} p - Progreso emitido por extractDataPerFile
+ */
+function renderProgreso({ fileName, fileIndex, totalFiles, chunk, totalChunks, milestones, chars }) {
+  const ANCHO = 24;
+  const fraccion = totalChunks > 0 ? chunk / totalChunks : 0;
+  const llenos = Math.round(fraccion * ANCHO);
+  const barra = '█'.repeat(llenos) + '░'.repeat(ANCHO - llenos);
+
+  const documento = `${fileIndex + 1}/${totalFiles}`;
+  const trozos = totalChunks > 1 ? ` trozo ${String(chunk).padStart(2)}/${totalChunks}` : '';
+  const nombre = fileName.length > 34 ? `${fileName.slice(0, 33)}…` : fileName.padEnd(34);
+  const tamaño = chars > 50000 ? chalk.gray(` ${Math.round(chars / 1000)}k`) : '';
+
+  process.stdout.write(
+    `\r  ${chalk.cyan(documento)} ${chalk.blue(barra)} ${nombre}${trozos}` +
+      `  ${chalk.green(String(milestones).padStart(3))} hitos${tamaño}   `
+  );
+
+  // Cerrar la línea cuando el documento termina, para que la siguiente empiece limpia
+  if (chunk === totalChunks) process.stdout.write('\n');
 }
 
 /**
@@ -50,7 +82,9 @@ export async function run({ pdfArg, force = false } = {}) {
   try {
     // Paso 1: Localizar documentos
     logger.section('Paso 1: Localizando documentos');
-    const pdfPath = pdfArg ?? await askForPDFPath();
+    // Con --force no se pregunta nada: es el modo no interactivo, pensado para
+    // regenerar todo el corpus cuando cambian las reglas del prompt.
+    const pdfPath = pdfArg ?? (force ? DEFAULT_PATTERN : await askForPDFPath());
 
     logger.processing('Buscando archivos PDF y Excel...');
     const pdfFiles = await findPDFs(pdfPath);
@@ -115,8 +149,13 @@ export async function run({ pdfArg, force = false } = {}) {
     // Paso 2: Extraer datos de cada documento
     logger.section('Paso 2: Extrayendo datos');
     logger.processing(`Procesando ${filesToProcess.length} documento(s)...`);
+    // Los documentos grandes se trocean: un reporte de 400.000 caracteres son
+    // más de treinta llamadas al modelo, y la corrida completa lleva minutos.
+    console.log('');
 
-    const perFileResults = await extractDataPerFile(filesToProcess);
+    const perFileResults = await extractDataPerFile(filesToProcess, {
+      onProgress: renderProgreso,
+    });
 
     // Paso 3: Guardar un CSV por documento
     logger.section('Paso 3: Guardando CSV por documento');

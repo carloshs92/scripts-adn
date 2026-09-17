@@ -53,19 +53,59 @@ src/
 └── cli/interactive.js    # Flujo interactivo con inquirer
 ```
 
-## Comandos disponibles
+## Comandos: el orden importa
+
+**Esta es la secuencia oficial. Nada se edita a mano en `output/` ni en
+`.pdf-registry.json`** — lo que se hace por fuera no se reproduce, y el corpus
+deja de ser trazable a su fuente. Si algo no se puede hacer con un comando, el
+arreglo es cambiar el script.
 
 ```bash
-npm start              # CLI interactivo: convierte PDFs y Excel → un CSV por documento en output/
-npm run merge:csv      # Consolida los CSVs de output/ en output/merged.csv
-npm run publish:corpus # Consolida + publica milestones.md en la app + VERIFICA su índice
-npm test               # Pruebas con vitest (dominio + contrato del corpus)
-npm run test:watch     # Las mismas, en modo watch
-npm run check:setup    # Verifica que la instalación esté correcta
-npm run example        # Ejemplo de uso programático
-npm run sync:spreadsheet  # Sube todos los CSVs de output/ a Google Drive (en proceso)
-npm run history        # Muestra el historial de versiones del corpus (--detail, --last)
+# ── acá ───────────────────────────────────────────────────────────────
+npm start                  # 1. pdfs/ → un CSV por documento
+npm run scrape:web         # 2. SOURCES → un CSV por dominio
+npm run merge:csv          # 3. todos los CSV → output/merged.csv
+npm run publish:corpus     # 4. publica milestones.md y VERIFICA el índice
+
+# ── en ../intercorp-adn ───────────────────────────────────────────────
+npm run corpus:index       # 5. reconstruye índice de búsqueda y grafo
+npm run corpus:translate   # 6. traduce al inglés los hitos nuevos
+
+# ── de vuelta acá ─────────────────────────────────────────────────────
+npm run publish:corpus     # 7. confirma que el índice ya coincide
 ```
+
+Los pasos 1 y 2 son independientes: se puede correr solo uno. Del 3 en adelante
+es una cadena, y el 4 no se da por bueno hasta ver
+`✓ El índice tiene N hitos: coincide con lo publicado`.
+
+| Cambió | Correr desde |
+|---|---|
+| Un PDF o Excel en `pdfs/` | 1 |
+| Las URLs de `SOURCES` | 2 |
+| Un prompt de extracción | 1 y 2, con `--force` |
+| Nada, solo republicar | 3 |
+
+```bash
+npm start -- --force                           # todos, sin preguntar
+npm start -- --pdf "pdfs/archivo.pdf" --force  # uno solo
+```
+
+`--force` salta el registro por huella y además evita el diálogo interactivo,
+así que es la vía para correrlo desde un script o una tarea programada.
+
+**Otros comandos**
+
+```bash
+npm test                   # 35 pruebas: dominio y contrato entre repos
+npm run history            # historial de versiones del corpus (--detail, --last)
+npm run sync:spreadsheet   # sube los CSV a Google Drive (consulta humana)
+npm run check:setup        # verifica que la instalación esté completa
+```
+
+**Cuánto tarda.** Una corrida completa de los 13 documentos son ~105 llamadas al
+modelo —los reportes grandes se trocean— unos 8 minutos y USD 0,15. Hay barra de
+progreso: si la consola queda muda más de un minuto, algo se colgó.
 
 ## Variables de entorno requeridas
 
@@ -112,6 +152,7 @@ pone roja.
 - Campos sin información se marcan como `N/A`
 - El `config.js` es la fuente de verdad para parámetros ajustables
 - `src/milestone/` es la fuente de verdad de las reglas del hito y **no importa nada de fuera de sí mismo**
+- Los scripts **fusionan, no reemplazan**: la extracción no es determinista y correr dos veces acumula cobertura
 - Las dependencias apuntan hacia adentro: `platform/` ← `ingest/` y `corpus/` ← `milestone/`
 - Un script de `scripts/` solo parsea argumentos y formatea salida; la lógica vive en un caso de uso
 
@@ -128,6 +169,21 @@ pone roja.
 `title`, `shortDescription`, `category`, `largeDescription`, `company`, `year`, `score`, `source_file`
 
 **Categorías válidas** (`CATEGORIES`): `sustainability`, `talent`, `innovation`, `security`
+
+## Troceado de documentos
+
+Un reporte de sostenibilidad llega a 432 000 caracteres. Entra en el contexto del
+modelo, pero pedirle "el máximo de ítems" sobre esa masa produce un **resumen**:
+la densidad cae de 147 hitos por cada 10 000 caracteres en un documento de una
+página a 1,6 en uno de 400 000. Por eso se trocea (`config.chunking`), se extrae
+de cada trozo y se fusionan los resultados.
+
+El efecto medido: el corpus pasó de 685 a 1 980 hitos sin agregar ni una fuente
+nueva. Solo InRetail subió de 71 a 347.
+
+Los trozos van en paralelo (`concurrency`, 5 por defecto) pero **se fusionan en el
+orden del documento**, no en el de llegada: dos corridas con el mismo material dan
+el mismo resultado aunque la red responda en distinto orden.
 
 ## El modelo de dominio: `src/milestone/`
 

@@ -1,4 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai';
+import { config } from '../config.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -74,6 +75,9 @@ export function createChatModel(overrides = {}) {
   return new ChatOpenAI({
     openAIApiKey: apiKey,
     modelName: model,
+    // Reintentos ante 429 y errores transitorios. Con los trozos en paralelo
+    // el rate limit se toca de vez en cuando, y el SDK espera y reintenta solo.
+    maxRetries: config.openai.maxRetries,
     ...(baseURL ? { configuration: { baseURL } } : {}),
     ...overrides,
   });
