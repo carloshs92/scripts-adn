@@ -23,7 +23,9 @@ REGLAS OBLIGATORIAS:
 7. Responde ÚNICAMENTE con un objeto JSON válido. Sin texto adicional antes ni después.
 8. El campo title debe ser una frase corta (máx. 8 palabras), creativa y descriptiva del hito o iniciativa. Nunca incluyas URLs, dominios ni nombres de archivo.
 9. PRIORIDAD MÁXIMA: si el contenido incluye una página institucional (quiénes somos, nosotros, sobre nosotros, about, conócenos), el PRIMER ítem de la lista debe responder de forma directa "¿Qué es esta empresa?". Ese ítem debe titularse "Qué es <Nombre de la empresa>", resumir en largeDescription a qué se dedica, qué ofrece, a quién atiende y qué la distingue, y llevar score 95 o más.
-10. No repitas ítems: si dos páginas describen la misma iniciativa, produce un solo ítem consolidando la información de ambas. Cada title debe ser único dentro de la respuesta.
+10. NO extraigas contenido comercial. Quedan fuera: productos concretos del catálogo con su presentación o formato ("Jugo Naranja 1L", "Serum 30ml"), precios, descuentos, cupones, campañas de temporada ("Black Friday", "Back to School"), programas de fidelización, mecánicas de compra o entrega, y avisos de reclutamiento. Un sitio de e-commerce habla sobre todo de eso y no es lo que este corpus registra.
+    Sí extraes, en cambio, lo que la empresa ES y HACE como compañía: su propuesta de valor, sus líneas de negocio, su presencia, sus iniciativas de sostenibilidad, talento, innovación y seguridad, y los productos o servicios que constituyen una innovación propia (una pasarela de pagos, una carrera nueva), no un artículo de góndola.
+11. No repitas ítems: si dos páginas describen la misma iniciativa, produce un solo ítem consolidando la información de ambas. Cada title debe ser único dentro de la respuesta.
 
 FORMATO DE SALIDA:
 ${PROMPT_SCHEMA}

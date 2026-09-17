@@ -120,6 +120,13 @@ describe('changedFields', () => {
   });
 });
 
+describe('lectura de CSV', () => {
+  it('rechaza en vez de tumbar el proceso ante un archivo inexistente', async () => {
+    const { read } = await import('../src/platform/csv.js');
+    await expect(read('output/__no_existe__.csv')).rejects.toThrow();
+  });
+});
+
 describe('dedupe', () => {
   const hito = (title, score, largeDescription = 'x') =>
     ({ title, score, largeDescription, source_file: 'f.pdf' });

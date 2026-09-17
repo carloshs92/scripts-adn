@@ -26,7 +26,7 @@ import path from 'path';
 import chalk from 'chalk';
 import { scrapeWebsite, getDomain } from '../src/ingest/site/crawl.js';
 import { extractDataFromWeb, COLUMNS } from '../src/ingest/extractFromSite.js';
-import { dedupe } from '../src/milestone/index.js';
+import { dedupe, titleKey } from '../src/milestone/index.js';
 import * as csvService from '../src/platform/csv.js';
 import { logger } from '../src/platform/log.js';
 import { llmConfig } from '../src/platform/llm.js';
@@ -54,13 +54,17 @@ const SOURCES = {
   ],
   retail: [
     'https://www.inretail.pe/',
-    'https://www.plazavea.com.pe/',
-    'https://www.makro.pe/',
+    // Los e-commerce se apuntan a su página institucional, no a la home: la
+    // home ES el catálogo, y de ahí salían hitos como "Jugo Naranja Cold
+    // Pressed" o "Back to School" — promociones, no hitos corporativos.
+    'https://www.plazavea.com.pe/nosotros',
+    'https://www.makro.pe/nosotros',
+    'https://www.vivanda.com.pe/nosotros',
+    'https://www.oechsle.pe/nosotros',
+    'https://www.promart.pe/nosotros',
+    // Sin /nosotros útil: se quedan en la home y la regla 11 del prompt filtra
     'https://www.tiendasmass.com.pe/',
-    'https://www.vivanda.com.pe/',
     'https://www.realplaza.com/',
-    'https://www.oechsle.pe/',
-    'https://www.promart.pe/',
     'https://www.supermercadosperuanos.com.pe/',
     'https://app.agora.pe/',
     // sip.pe es una SPA de Angular: su HTML no trae texto (las 3 URLs devuelven
@@ -156,6 +160,40 @@ function groupByDomain(entries) {
   return [...groups.values()];
 }
 
+/**
+ * Une lo recién extraído con lo que ya estaba en el CSV del dominio.
+ *
+ * Los nuevos van primero: ante títulos equivalentes `dedupe` conserva el de
+ * mayor score, y los recién extraídos traen las reglas de prompt vigentes.
+ * Después se descartan los casi-duplicados —títulos cuyas palabras
+ * significativas están contenidas en las de otro, como "Museo Sipán" dentro de
+ * "Museo de Sipán Renovado"— que `dedupe` no detecta por comparar el título
+ * completo.
+ *
+ * @param {Array<Object>} nuevos
+ * @param {Array<Object>} previos
+ * @returns {Array<Object>}
+ */
+function fusionar(nuevos, previos) {
+  const significativas = (titulo) =>
+    new Set(titleKey(titulo).split(' ').filter((w) => w.length > 4));
+
+  const contenido = (a, b) => {
+    const [x, y] = [significativas(a), significativas(b)];
+    const chico = x.size < y.size ? x : y;
+    const grande = x.size < y.size ? y : x;
+    return chico.size > 0 && [...chico].every((w) => grande.has(w));
+  };
+
+  const { milestones } = dedupe([...nuevos, ...previos]);
+  const conservados = [];
+  for (const hito of milestones) {
+    if (conservados.some((c) => contenido(c.title, hito.title))) continue;
+    conservados.push(hito);
+  }
+  return conservados;
+}
+
 async function main() {
   console.log(chalk.blue.bold('\n🌐 Web Scraper Inteligente — LangChain\n'));
 
@@ -233,10 +271,22 @@ async function main() {
       continue;
     }
 
-    // 4. Guardar CSV individual (sobreescribe si ya existe)
+    // 4. Fusionar con lo que ya había, en vez de reemplazarlo.
+    //
+    // La extracción no es determinista: el mismo sitio devolvió 22, 13 y 10
+    // hitos en corridas distintas, y una tercera vez un JSON inválido. Con
+    // sobreescritura, cada re-scrapeo perdía lo que esa corrida no vio —SIP
+    // cayó de 15 hitos a 4— así que lo nuevo se suma a lo anterior.
+    const previos = await csvService.read(csvPath).catch(() => []);
+    const fusionados = fusionar(rows, previos);
+    const sumados = fusionados.length - previos.length;
+
     await csvService.create(csvPath, COLUMNS);
-    await csvService.addRows(csvPath, rows, COLUMNS);
-    console.log(chalk.green(`│  💾 ${csvName} → ${rows.length} ítem(s)`));
+    await csvService.addRows(csvPath, fusionados, COLUMNS);
+    console.log(
+      chalk.green(`│  💾 ${csvName} → ${fusionados.length} ítem(s)`) +
+        (previos.length ? chalk.gray(`  (${previos.length} previos, ${sumados >= 0 ? '+' : ''}${sumados})`) : '')
+    );
     console.log(chalk.blue(`└──\n`));
 
     totalItems += rows.length;

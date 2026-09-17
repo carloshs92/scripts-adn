@@ -98,7 +98,12 @@ export async function read(csvPath) {
   return new Promise((resolve, reject) => {
     const results = [];
 
-    createReadStream(csvPath)
+    // El error va escuchado en el stream de origen, no solo en el parser: un
+    // archivo inexistente emite ENOENT acá y, sin este handler, Node lo trata
+    // como un 'error' sin escuchar y tumba el proceso en vez de rechazar.
+    const origen = createReadStream(csvPath).on('error', reject);
+
+    origen
       .pipe(csv())
       .on('data', (row) => {
         // Descartar filas totalmente vacías (CSVs generados antes del fix
