@@ -1,4 +1,5 @@
 import inquirer from 'inquirer';
+import chalk from 'chalk';
 import * as path from 'path';
 import { findPDFs } from '../ingest/document/index.js';
 import { extractDataPerFile, COLUMNS } from '../ingest/extractFromDocuments.js';
@@ -36,7 +37,7 @@ async function askForPDFPath() {
  *
  * @param {Object} p - Progreso emitido por extractDataPerFile
  */
-function renderProgreso({ fileName, fileIndex, totalFiles, chunk, totalChunks, milestones, chars }) {
+export function renderProgreso({ fileName, fileIndex, totalFiles, chunk, totalChunks, milestones, chars }) {
   const ANCHO = 24;
   const fraccion = totalChunks > 0 ? chunk / totalChunks : 0;
   const llenos = Math.round(fraccion * ANCHO);
