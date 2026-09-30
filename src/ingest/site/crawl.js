@@ -43,7 +43,7 @@ async function fetchHTML(url) {
 /**
  * Extrae texto limpio y estructurado de un documento cheerio
  */
-function parsePageContent($, url) {
+export function parsePageContent($, url) {
   // Eliminar ruido: scripts, estilos, navegación, cookies, etc.
   $(
     'script, style, noscript, nav, footer, header, iframe, ' +
@@ -79,7 +79,7 @@ function parsePageContent($, url) {
  * Encuentra enlaces que apuntan a secciones de contenido (blog, noticias, prensa)
  * dentro del mismo dominio
  */
-function discoverContentLinks($, baseUrl) {
+export function discoverContentLinks($, baseUrl) {
   const origin = new URL(baseUrl).origin;
   const seen = new Set([baseUrl]);
   const links = [];
@@ -180,12 +180,17 @@ export async function scrapeWebsite(urlOrUrls, { wordpress } = {}) {
       visited.add(normalized);
 
       const $ = cheerio.load(html);
-      seedPages.push(parsePageContent($, normalized));
 
-      // Descubrir subpáginas de contenido desde cada semilla
+      // El orden importa: parsePageContent() hace .remove() sobre nav, header,
+      // footer y todo lo que huela a menú, y muta el documento compartido. Los
+      // enlaces a blog y noticias viven justamente ahí, así que descubrirlos
+      // después dejaba el crawler ciego a la navegación del sitio: 31 de 36
+      // fuentes reportaban cero subpáginas teniéndolas.
       for (const link of discoverContentLinks($, normalized)) {
         if (!discovered.includes(link)) discovered.push(link);
       }
+
+      seedPages.push(parsePageContent($, normalized));
     } catch (err) {
       errors.push(`${normalized}: ${err.message}`);
       logger.debug(`  ✗ ${normalized}: ${err.message}`);
@@ -237,4 +242,4 @@ export async function scrapeWebsite(urlOrUrls, { wordpress } = {}) {
   };
 }
 
-export default { scrapeWebsite, getDomain };
+export default { scrapeWebsite, getDomain, discoverContentLinks, parsePageContent };
