@@ -36,12 +36,21 @@ CONTENIDO WEB:
 
 /**
  * Extrae ítems estructurados del contenido web de un sitio usando LangChain + OpenAI.
+ *
+ * `origen` es lo que queda escrito en `source_file` y lo que la app muestra como
+ * procedencia del hito. Por defecto es el dominio, pero quien llama suele
+ * conocer un nombre mejor —"Retail / Promart" en vez de "promart.pe"— y el
+ * dominio no siempre identifica a la empresa: realplaza.com sirve tanto a Real
+ * Plaza como a Don Belisario.
+ *
  * @param {Object} scraped - Objeto {url, domain, content} retornado por webScraperService
+ * @param {Object} [opciones]
+ * @param {string} [opciones.origen] - Etiqueta de procedencia; default: el dominio
  * @returns {Promise<Array>} Hitos deduplicados, listos para escribir en CSV
  */
-export async function extractDataFromWeb({ url, domain, content }) {
+export async function extractDataFromWeb({ url, domain, content }, { origen } = {}) {
   const chain = PromptTemplate.fromTemplate(WEB_EXTRACTION_PROMPT).pipe(createChatModel());
-  const extracted = await extractWithChain(chain, content, domain);
+  const extracted = await extractWithChain(chain, content, origen || domain);
 
   const { milestones, duplicates } = dedupe(extracted);
   if (duplicates > 0) {
