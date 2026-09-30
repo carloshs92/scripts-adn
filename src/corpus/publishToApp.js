@@ -15,8 +15,17 @@ import * as csv from '../platform/csv.js';
 import { buildCorpusMarkdown, groupBySource } from './markdown.js';
 import { recordVersion } from './version.js';
 
-/** Ruta del corpus en el proyecto de la app, que vive al mismo nivel. */
-export const APP_CORPUS = '../intercorp-adn/data/milestones.md';
+/**
+ * Carpeta del proyecto de la app, que vive al mismo nivel.
+ *
+ * `APP_DIR` la reapunta sin tocar el código: sirve para publicar contra un
+ * worktree de git —una rama distinta abierta en otra carpeta— sin pisar lo que
+ * haya sin commitear en la copia principal.
+ */
+export const APP_DIR = process.env.APP_DIR || '../intercorp-adn';
+
+/** Ruta del corpus en el proyecto de la app. */
+export const APP_CORPUS = `${APP_DIR}/data/milestones.md`;
 
 /**
  * Escribe el corpus en Markdown y registra la versión.

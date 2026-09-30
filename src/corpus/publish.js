@@ -18,12 +18,20 @@
 import fs from 'fs';
 import path from 'path';
 import { consolidate } from './consolidate.js';
-import { publishToApp, APP_CORPUS } from './publishToApp.js';
+import { publishToApp, APP_CORPUS, APP_DIR } from './publishToApp.js';
 import { key as milestoneKey } from '../milestone/index.js';
 import * as csv from '../platform/csv.js';
 
-/** Índice de búsqueda de la app, relativo a este proyecto. */
-const APP_INDEX = '../intercorp-adn/lib/search-index.generated.json';
+/**
+ * Índice de búsqueda de la app, relativo a este proyecto.
+ *
+ * Vivía en `lib/` hasta que la app se reorganizó por kiosco. La ruta es un
+ * acuerdo entre dos repositorios que nada verifica en tiempo de compilación,
+ * así que cuando se mueve, esta verificación deja de encontrarla y avisa en
+ * vez de callarse: ese silencio es justo lo que este archivo existe para
+ * evitar.
+ */
+const APP_INDEX = `${APP_DIR}/kiosks/timeline/search-engine/server/search-index.generated.json`;
 
 /**
  * Compara el corpus recién publicado contra el índice que sirve la app.
